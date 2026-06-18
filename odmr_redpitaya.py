@@ -47,7 +47,7 @@ F_STEP_MHZ  = 1.0         # step size
 OUTPUT_FILE = "odmr_spectrum.csv"
 
 AVERAGES_PER_POINT = 4    # photodiode captures averaged at each frequency
-LOCK_TIMEOUT_S     = 5.0  # max wait for PLL lock per step before giving up
+LOCK_TIMEOUT_S     = 10 # max wait for PLL lock per step before giving up
 
 # Fast ADC (photodiode on IN1)
 ADC_CHANNEL = rp.RP_CH_1      # IN1
@@ -112,7 +112,7 @@ def build_registers(freq_mhz):
 # ADF4351 over SPI
 # ============================================================================
 class ADF4351:
-    def __init__(self, bus=1, device=0, speed_hz=SPI_HZ):
+    def __init__(self, bus=2, device=0, speed_hz=SPI_HZ):
         self.spi = spidev.SpiDev()
         self.spi.open(bus, device)        # /dev/spidev1.0 on RedPitaya E2
         self.spi.max_speed_hz = speed_hz
@@ -164,12 +164,22 @@ class RedPitayaADC:
         rp.rp_AcqStart()
         rp.rp_AcqSetTriggerSrc(trigger_src)
 
-    def read_mean(self, timeout_s):
-        """Wait for the armed trigger, then return the mean voltage of the block."""
+    def wait_for_lock(self, timeout_s):
+        """Wait for the armed EXT_PE trigger (LD lock edge); return lock time in ms.
+
+        Call this after arm(RP_TRIG_SRC_EXT_PE) + set_frequency() so the caller
+        knows the exact moment the PLL confirmed lock before reading the buffer.
+        """
         deadline = time.time() + timeout_s
+        t0 = time.perf_counter()
         while rp.rp_AcqGetTriggerState()[1] != rp.RP_TRIG_STATE_TRIGGERED:
             if time.time() > deadline:
                 raise TimeoutError("no trigger (PLL did not lock / LD not on DIO0_P)")
+        return (time.perf_counter() - t0) * 1e3
+
+    def read_mean(self, timeout_s):
+        """Wait for the buffer to fill after triggering, then return the mean voltage."""
+        deadline = time.time() + timeout_s
         while rp.rp_AcqGetBufferFillState()[1] is False:
             if time.time() > deadline:
                 raise TimeoutError("ADC buffer did not fill after trigger")
@@ -195,10 +205,14 @@ def frange(start, stop, step):
 
 def measure_point(adf, adc, freq_mhz):
     """Set the frequency, wait for lock, and return the averaged photoluminescence."""
-    # First capture is gated on the LD lock edge, so it can only run once the
-    # new frequency is settled. Arm BEFORE writing the registers.
+    # Arm BEFORE writing registers so the ADC is ready for the LD rising edge.
     adc.arm(rp.RP_TRIG_SRC_EXT_PE)
     adf.set_frequency(freq_mhz)
+
+    # Wait for the LD lock edge and print confirmation the instant it fires.
+    lock_ms = adc.wait_for_lock(LOCK_TIMEOUT_S)
+    print(f"locked ({lock_ms:.1f} ms) ", end="", flush=True)
+
     total = adc.read_mean(LOCK_TIMEOUT_S)
 
     # Additional averages at the same (now-locked) frequency use an immediate
@@ -227,10 +241,11 @@ def run_sweep():
             f.write("freq_MHz,pl_volts\n")
 
             for i, freq in enumerate(freqs, 1):
+                print(f"[{i}/{len(freqs)}] {freq:.3f} MHz  ", end="", flush=True)
                 pl = measure_point(adf, adc, freq)
                 f.write(f"{freq:.4f},{pl:.6f}\n")
                 f.flush()
-                print(f"[{i}/{len(freqs)}] {freq:.3f} MHz -> {pl:.6f} V")
+                print(f"-> {pl:.6f} V")
 
         print(f"Done. Wrote {OUTPUT_FILE}")
     except KeyboardInterrupt:
