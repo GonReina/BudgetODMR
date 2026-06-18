@@ -40,11 +40,11 @@ import rp
 # ============================================================================
 # EXPERIMENT CONFIGURATION  -- edit these, then run the script
 # ============================================================================
-F_START_MHZ = 2800.0      # sweep start frequency
+F_START_MHZ = 2700.0      # sweep start frequency
 F_STOP_MHZ  = 3000.0      # sweep stop frequency (inclusive)
 F_STEP_MHZ  = 1.0         # step size
 
-OUTPUT_FILE = "odmr_spectrum.csv"
+OUTPUT_FILE = "odmr_spectrum_2.csv"
 
 AVERAGES_PER_POINT = 4    # photodiode captures averaged at each frequency
 LOCK_TIMEOUT_S     = 10 # max wait for PLL lock per step before giving up
