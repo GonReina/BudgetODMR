@@ -1,51 +1,71 @@
 """
-ODMR frequency sweep on a RedPitaya (STEMlab), all in on-board Python.
+NV-centre ODMR experiment on a RedPitaya (STEMlab).
 
-The RedPitaya does everything:
-  * drives the ADF4351 over hardware SPI (spidev),
-  * captures the photodiode on fast ADC IN1, with each capture HARDWARE-TRIGGERED
-    on the ADF's Lock Detect (LD) pin so acquisition starts exactly when the new
-    frequency is locked. That makes the command -> lock lag irrelevant: the ADC
-    cannot start until the frequency is real.
+For every frequency step the RedPitaya:
+  1. programs the ADF4351 over SPI to the next microwave frequency,
+  2. waits (in hardware) for the PLL Lock Detect edge on DIO0_P, so acquisition
+     only starts once the frequency is genuinely settled,
+  3. samples the photodiode (photoluminescence) on fast ADC IN1 and averages it,
+  4. writes "freq_MHz,pl_volts" to the output file,
+and repeats until the sweep is complete. Plot the result with plot_odmr.py.
 
-Sweep is point-by-point: set frequency -> wait (in hardware) for LD lock edge ->
-integrate a block of ADC samples -> next point.
+Edit the EXPERIMENT CONFIGURATION block below and run:  python3 odmr_redpitaya.py
+(There are no command-line arguments by design.)
 
 ------------------------------------------------------------------------------
 WIRING (E1/E2 connectors -> ADF4351 module)
   E2 SPI SCK   -> ADF CLK
   E2 SPI MOSI  -> ADF DATA
   E2 SPI CS    -> ADF LE      (CS idles high, pulses the latch at end of transfer)
-  P3V3         -> ADF CE      (chip enable; or hold a DIO high)
+  P3V3         -> ADF VDD and CE
   ADF LD       -> E1 DIO0_P   (external trigger input for the fast ADC)
   Photodiode   -> IN1         (fast ADC; set the LV/HV jumper for your amp's range)
   GND          -> common ground between RedPitaya, ADF module, and photodiode amp
 ------------------------------------------------------------------------------
 
-Run on the RedPitaya:  python3 odmr_redpitaya.py --out sweep.csv
-
 Notes:
   * Run as root (ADC + SPI access).
-  * The RedPitaya `rp` acquisition API varies by OS version. All of those calls
-    are confined to the RedPitayaADC class below; if a name/constant differs on
-    your image, fix it there (run `help(rp)` to check). Everything else is stable.
-  * If the `rp` API is troublesome on your version, the SCPI server is a very
-    stable alternative for the ADC half -- ask and I'll provide that variant.
+  * The RedPitaya `rp` acquisition API varies by OS version. Those calls are
+    confined to the RedPitayaADC class; if a name/constant differs on your
+    image, fix it there (run `help(rp)` to check).
 """
 
-import argparse
 import time
+from datetime import datetime
 
 import spidev
 import rp
 
 
 # ============================================================================
-# ADF4351 register math (identical to odmr_sweep.py / the Arduino sketches)
+# EXPERIMENT CONFIGURATION  -- edit these, then run the script
 # ============================================================================
-REF_MHZ = 25.0          # on-board reference oscillator feeding the ADF
-FPFD_MHZ = REF_MHZ      # fPFD = REF * (1+D) / (R * (1+T)) with D=0, R=1, T=0
-MOD_VAL = 1000          # fRES = fPFD/MOD = 25 kHz channel spacing
+F_START_MHZ = 2800.0      # sweep start frequency
+F_STOP_MHZ  = 3000.0      # sweep stop frequency (inclusive)
+F_STEP_MHZ  = 1.0         # step size
+
+OUTPUT_FILE = "odmr_spectrum.csv"
+
+AVERAGES_PER_POINT = 4    # photodiode captures averaged at each frequency
+LOCK_TIMEOUT_S     = 5.0  # max wait for PLL lock per step before giving up
+
+# Fast ADC (photodiode on IN1)
+ADC_CHANNEL = rp.RP_CH_1      # IN1
+DECIMATION  = rp.RP_DEC_64    # ~8 ms integration window per capture (16384 samples)
+N_SAMPLES   = 16384           # samples per capture
+
+# ADF4351 SPI
+SPI_HZ = 1_000_000
+
+# ADF4351 synthesis (25 MHz reference; fPFD = 25 MHz; MOD=1000 -> 25 kHz res)
+REF_MHZ = 25.0
+MOD_VAL = 1000
+
+
+# ============================================================================
+# ADF4351 register math
+# ============================================================================
+FPFD_MHZ = REF_MHZ        # fPFD = REF * (1+D) / (R * (1+T)) with D=0, R=1, T=0
 
 # RF output divider options: select code (R4[22:20]) -> actual divisor.
 # The VCO runs 2200-4400 MHz; we pick the smallest divider that keeps it there.
@@ -92,7 +112,7 @@ def build_registers(freq_mhz):
 # ADF4351 over SPI
 # ============================================================================
 class ADF4351:
-    def __init__(self, bus=1, device=0, speed_hz=1_000_000):
+    def __init__(self, bus=1, device=0, speed_hz=SPI_HZ):
         self.spi = spidev.SpiDev()
         self.spi.open(bus, device)        # /dev/spidev1.0 on RedPitaya E2
         self.spi.max_speed_hz = speed_hz
@@ -122,39 +142,34 @@ class ADF4351:
 
 
 # ============================================================================
-# Fast ADC, externally triggered on the LD pin (DIO0_P)
+# Fast ADC, triggered on the LD lock edge (DIO0_P) or immediately
 # ============================================================================
 # NOTE: the calls in this class are the version-sensitive ones. They follow the
 # RedPitaya 2.x `rp` API. Verify names against your image if acquisition errors.
 class RedPitayaADC:
-    def __init__(self, channel=rp.RP_CH_1, decimation=rp.RP_DEC_64, n_samples=16384):
+    def __init__(self, channel=ADC_CHANNEL, decimation=DECIMATION, n_samples=N_SAMPLES):
         self.channel = channel
         self.decimation = decimation
         self.n_samples = n_samples
         rp.rp_Init()
         self.buff = rp.fBuffer(n_samples)
 
-    def arm(self):
+    def arm(self, trigger_src):
+        """Arm an acquisition. Use RP_TRIG_SRC_EXT_PE for the LD lock edge, or
+        RP_TRIG_SRC_NOW for an immediate capture once already locked."""
         rp.rp_AcqReset()
         rp.rp_AcqSetDecimation(self.decimation)
-        # Put the trigger near the start of the buffer so captured samples are
-        # post-trigger (i.e. after the lock edge).
+        # Trigger near the start of the buffer so captured samples are post-trigger.
         rp.rp_AcqSetTriggerDelay(self.n_samples)
         rp.rp_AcqStart()
-        # External positive edge on DIO0_P (= ADF LD going high on lock).
-        rp.rp_AcqSetTriggerSrc(rp.RP_TRIG_SRC_EXT_PE)
+        rp.rp_AcqSetTriggerSrc(trigger_src)
 
-    def wait_and_read(self, timeout_s=0.5):
-        """Block until the LD lock edge triggers, then return the mean voltage."""
+    def read_mean(self, timeout_s):
+        """Wait for the armed trigger, then return the mean voltage of the block."""
         deadline = time.time() + timeout_s
-        # Wait for the trigger (lock) edge.
-        while True:
-            state = rp.rp_AcqGetTriggerState()[1]
-            if state == rp.RP_TRIG_STATE_TRIGGERED:
-                break
+        while rp.rp_AcqGetTriggerState()[1] != rp.RP_TRIG_STATE_TRIGGERED:
             if time.time() > deadline:
-                raise TimeoutError("PLL did not lock (no LD trigger edge)")
-        # Wait for the post-trigger buffer to fill.
+                raise TimeoutError("no trigger (PLL did not lock / LD not on DIO0_P)")
         while rp.rp_AcqGetBufferFillState()[1] is False:
             if time.time() > deadline:
                 raise TimeoutError("ADC buffer did not fill after trigger")
@@ -169,7 +184,7 @@ class RedPitayaADC:
 
 
 # ============================================================================
-# Sweep
+# Measurement
 # ============================================================================
 def frange(start, stop, step):
     f = start
@@ -178,50 +193,52 @@ def frange(start, stop, step):
         f += step
 
 
-def main():
-    p = argparse.ArgumentParser(description="ADF4351 + RedPitaya ODMR sweep")
-    p.add_argument("--start", type=float, default=2800.0, help="start freq, MHz")
-    p.add_argument("--stop", type=float, default=3000.0, help="stop freq, MHz")
-    p.add_argument("--step", type=float, default=1.0, help="step size, MHz")
-    p.add_argument("--spi-hz", type=int, default=1_000_000, help="SPI clock, Hz")
-    p.add_argument("--lock-timeout", type=float, default=5, help="per-step lock timeout, s")
-    p.add_argument("--dwell", type=float, default=0.0,
-                   help="extra time to spend at each frequency after acquiring, in seconds "
-                        "(e.g. 0.1 for 100 ms). Does not affect ADC integration time, "
-                        "only the gap before moving to the next step.")
-    p.add_argument("--out", default=None, help="CSV output file (freq_MHz,volts)")
-    p.add_argument("--repeat", action="store_true", help="loop until interrupted")
-    args = p.parse_args()
+def measure_point(adf, adc, freq_mhz):
+    """Set the frequency, wait for lock, and return the averaged photoluminescence."""
+    # First capture is gated on the LD lock edge, so it can only run once the
+    # new frequency is settled. Arm BEFORE writing the registers.
+    adc.arm(rp.RP_TRIG_SRC_EXT_PE)
+    adf.set_frequency(freq_mhz)
+    total = adc.read_mean(LOCK_TIMEOUT_S)
 
-    adf = ADF4351(speed_hz=args.spi_hz)
+    # Additional averages at the same (now-locked) frequency use an immediate
+    # trigger, since LD is already high and won't produce another rising edge.
+    for _ in range(AVERAGES_PER_POINT - 1):
+        adc.arm(rp.RP_TRIG_SRC_NOW)
+        total += adc.read_mean(LOCK_TIMEOUT_S)
+
+    return total / AVERAGES_PER_POINT
+
+
+def run_sweep():
+    freqs = list(frange(F_START_MHZ, F_STOP_MHZ, F_STEP_MHZ))
+    print(f"ODMR sweep: {F_START_MHZ}-{F_STOP_MHZ} MHz, {F_STEP_MHZ} MHz steps "
+          f"({len(freqs)} points), {AVERAGES_PER_POINT} averages/point")
+
+    adf = ADF4351(speed_hz=SPI_HZ)
     adc = RedPitayaADC()
-    out = open(args.out, "w") if args.out else None
-    if out:
-        out.write("freq_MHz,volts\n")
 
     try:
-        while True:
-            for freq in frange(args.start, args.stop, args.step):
-                adc.arm()                         # arm BEFORE changing frequency
-                adf.set_frequency(freq)           # R0 write -> LD drops, re-locks
-                volts = adc.wait_and_read(args.lock_timeout)  # triggers on lock edge
-                if args.dwell > 0:
-                    time.sleep(args.dwell)
-                line = f"{freq:.3f},{volts:.6f}"
-                print(line)
-                if out:
-                    out.write(line + "\n")
-                    out.flush()
-            if not args.repeat:
-                break
+        with open(OUTPUT_FILE, "w") as f:
+            f.write(f"# NV ODMR spectrum, {datetime.now().isoformat(timespec='seconds')}\n")
+            f.write(f"# start={F_START_MHZ} stop={F_STOP_MHZ} step={F_STEP_MHZ} MHz\n")
+            f.write(f"# averages_per_point={AVERAGES_PER_POINT} "
+                    f"samples_per_capture={N_SAMPLES}\n")
+            f.write("freq_MHz,pl_volts\n")
+
+            for i, freq in enumerate(freqs, 1):
+                pl = measure_point(adf, adc, freq)
+                f.write(f"{freq:.4f},{pl:.6f}\n")
+                f.flush()
+                print(f"[{i}/{len(freqs)}] {freq:.3f} MHz -> {pl:.6f} V")
+
+        print(f"Done. Wrote {OUTPUT_FILE}")
     except KeyboardInterrupt:
-        print("\n# stopped")
+        print(f"\nStopped early. Partial data in {OUTPUT_FILE}")
     finally:
         adf.close()
         adc.close()
-        if out:
-            out.close()
 
 
 if __name__ == "__main__":
-    main()
+    run_sweep()
