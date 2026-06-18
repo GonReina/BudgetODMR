@@ -15,8 +15,8 @@ import csv
 import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
-INPUT_FILE = "odmr_spectrum.csv"
-SAVE_FIG   = "odmr_spectrum.png"   # set to None to skip saving
+INPUT_FILE = "odmr_spectrum_2.csv"
+SAVE_FIG   = "odmr_spectrum_2.png"   # set to None to skip saving
 
 
 def load_spectrum(path):
