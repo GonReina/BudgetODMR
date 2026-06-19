@@ -224,6 +224,30 @@ def measure_point(adf, adc, freq_mhz):
     return total / AVERAGES_PER_POINT
 
 
+def sweep_once(adf, adc, freqs, out_path, header_extra=None):
+    """Run one full sweep over `freqs`, writing freq_MHz,pl_volts to out_path.
+
+    Shared by run_sweep() here and by odmr_repeat_sweeps.py, so both use the
+    exact same per-point lock-and-average logic. Re-raises TimeoutError after
+    flushing partial data so the caller can decide whether to abort the batch.
+    """
+    with open(out_path, "w") as f:
+        f.write(f"# NV ODMR spectrum, {datetime.now().isoformat(timespec='seconds')}\n")
+        f.write(f"# start={F_START_MHZ} stop={F_STOP_MHZ} step={F_STEP_MHZ} MHz\n")
+        f.write(f"# averages_per_point={AVERAGES_PER_POINT} "
+                f"samples_per_capture={N_SAMPLES}\n")
+        if header_extra:
+            f.write(f"# {header_extra}\n")
+        f.write("freq_MHz,pl_volts\n")
+
+        for i, freq in enumerate(freqs, 1):
+            print(f"[{i}/{len(freqs)}] {freq:.3f} MHz  ", end="", flush=True)
+            pl = measure_point(adf, adc, freq)
+            f.write(f"{freq:.4f},{pl:.6f}\n")
+            f.flush()
+            print(f"-> {pl:.6f} V")
+
+
 def run_sweep():
     freqs = list(frange(F_START_MHZ, F_STOP_MHZ, F_STEP_MHZ))
     print(f"ODMR sweep: {F_START_MHZ}-{F_STOP_MHZ} MHz, {F_STEP_MHZ} MHz steps "
@@ -233,20 +257,7 @@ def run_sweep():
     adc = RedPitayaADC()
 
     try:
-        with open(OUTPUT_FILE, "w") as f:
-            f.write(f"# NV ODMR spectrum, {datetime.now().isoformat(timespec='seconds')}\n")
-            f.write(f"# start={F_START_MHZ} stop={F_STOP_MHZ} step={F_STEP_MHZ} MHz\n")
-            f.write(f"# averages_per_point={AVERAGES_PER_POINT} "
-                    f"samples_per_capture={N_SAMPLES}\n")
-            f.write("freq_MHz,pl_volts\n")
-
-            for i, freq in enumerate(freqs, 1):
-                print(f"[{i}/{len(freqs)}] {freq:.3f} MHz  ", end="", flush=True)
-                pl = measure_point(adf, adc, freq)
-                f.write(f"{freq:.4f},{pl:.6f}\n")
-                f.flush()
-                print(f"-> {pl:.6f} V")
-
+        sweep_once(adf, adc, freqs, OUTPUT_FILE)
         print(f"Done. Wrote {OUTPUT_FILE}")
     except KeyboardInterrupt:
         print(f"\nStopped early. Partial data in {OUTPUT_FILE}")
