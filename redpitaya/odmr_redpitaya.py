@@ -30,6 +30,7 @@ Notes:
     image, fix it there (run `help(rp)` to check).
 """
 
+import os
 import time
 from datetime import datetime
 
@@ -44,7 +45,7 @@ F_START_MHZ = 2700.0      # sweep start frequency
 F_STOP_MHZ  = 3000.0      # sweep stop frequency (inclusive)
 F_STEP_MHZ  = 1.0         # step size
 
-OUTPUT_FILE = "odmr_spectrum_2.csv"
+OUTPUT_FILE = "data/odmr_spectrum_2.csv"   # everything under data/ gets synced to the PC
 
 AVERAGES_PER_POINT = 4    # photodiode captures averaged at each frequency
 LOCK_TIMEOUT_S     = 10 # max wait for PLL lock per step before giving up
@@ -231,6 +232,9 @@ def sweep_once(adf, adc, freqs, out_path, header_extra=None):
     exact same per-point lock-and-average logic. Re-raises TimeoutError after
     flushing partial data so the caller can decide whether to abort the batch.
     """
+    out_dir = os.path.dirname(out_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(out_path, "w") as f:
         f.write(f"# NV ODMR spectrum, {datetime.now().isoformat(timespec='seconds')}\n")
         f.write(f"# start={F_START_MHZ} stop={F_STOP_MHZ} step={F_STEP_MHZ} MHz\n")

@@ -27,9 +27,9 @@ from odmr_redpitaya import (
 # CONFIGURATION  -- edit these, then run the script
 # (the sweep range and averages/point come from odmr_redpitaya.py)
 # ============================================================================
-N_SWEEPS        = 10            # how many full sweeps to record
-RUNS_DIR        = "odmr_runs"   # folder for the per-run CSV files
-DELAY_BETWEEN_S = 0.0           # optional pause between sweeps, seconds
+N_SWEEPS        = 10                 # how many full sweeps to record
+RUNS_DIR        = "data/odmr_runs"   # everything under data/ gets synced to the PC
+DELAY_BETWEEN_S = 0.0                # optional pause between sweeps, seconds
 
 
 def run_repeated():

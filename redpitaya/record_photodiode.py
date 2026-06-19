@@ -18,6 +18,7 @@ Run as root (ADC access).
 """
 
 import math
+import os
 import time
 from datetime import datetime
 
@@ -28,9 +29,9 @@ import rp
 # CONFIGURATION  -- edit these, then run the script
 # ============================================================================
 DURATION_S      = 600.0          # total recording time (600 s = 10 minutes)
-OUTPUT_FILE     = "photodiode_timeseries.csv"
+OUTPUT_FILE     = "data/photodiode_laser_off.csv"   # everything under data/ gets synced to the PC
 
-SAMPLE_PERIOD_S = 0.1            # min spacing between logged points (0 = as fast as possible)
+SAMPLE_PERIOD_S = 0.8            # min spacing between logged points (0 = as fast as possible)
 PRINT_EVERY_S   = 10.0           # console progress interval
 
 ADC_CHANNEL = rp.RP_CH_1         # IN1
@@ -68,6 +69,10 @@ def record():
     print(f"Recording IN1 for {DURATION_S:.0f} s -> {OUTPUT_FILE}")
     rp.rp_Init()
     buff = rp.fBuffer(N_SAMPLES)
+
+    out_dir = os.path.dirname(OUTPUT_FILE)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
     n = 0
     next_print = PRINT_EVERY_S
