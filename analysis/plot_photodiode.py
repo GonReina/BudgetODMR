@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-INPUT_FILE = os.path.join(DATA_DIR, "photodiode_timeseries.csv")
-SAVE_FIG   = os.path.join(DATA_DIR, "photodiode_timeseries.png")   # set to None to skip saving
+DATA_DIR   = r"D:\data"
+INPUT_FILE = os.path.join(DATA_DIR, "photodiode_laser_on.csv")
+SAVE_FIG   = os.path.join(DATA_DIR, "photodiode_laser_on.png")   # set to None to skip saving
 
 
 def load_series(path):

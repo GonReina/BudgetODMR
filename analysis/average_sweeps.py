@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+DATA_DIR   = r"D:\data"
 RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs")     # where odmr_repeat_sweeps.py output landed
 RUNS_GLOB  = "run_*.csv"
 OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average.csv")
