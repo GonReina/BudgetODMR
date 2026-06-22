@@ -2,6 +2,12 @@
 Bench test: program the ADF4351 to 500 MHz and measure the time from sending
 the register data to the PLL asserting Lock Detect (LD).
 
+Reuses ADF4351/build_registers from odmr_redpitaya.py -- the exact same
+register-construction code the working ODMR sweep uses (R=1, CP=5 mA,
+MUXOUT=digital lock detect, low-noise mode) -- instead of a separately
+hand-maintained register set, so this bench test can't drift out of sync
+with what's actually verified to work.
+
 Run on the RedPitaya:   python3 test_500mhz_locktime.py
 
 Wiring (as built):
@@ -14,55 +20,24 @@ only then is it disabled, so the ADF doesn't keep transmitting after the
 script has actually ended.
 
 Note: the `rp` digital-pin calls (RP_DIO0_P, rp_DpinGetState, RP_HIGH/RP_LOW)
-can vary by RedPitaya OS version. They're isolated in ld_state()/setup below;
-run `help(rp)` if a name differs on your image.
+can vary by RedPitaya OS version. They're isolated in ld_state() below; run
+`help(rp)` if a name differs on your image.
 """
 
 import time
 
-import spidev
 import rp
 
-# --- 500 MHz register set (REF = 25 MHz, VCO = 4000 MHz, RF divider /8) ------
-# Identical to the verified Arduino set500MHz(): INT=160, FRAC=0 (integer-N).
-# R0 is last in the list but written last on purpose (it triggers the lock).
-REGISTERS_500MHZ = [
-    0x00500000,  # R0: INT=160 (VCO = 160 * 25 MHz = 4000 MHz), FRAC=0
-    0x08008011,  # R1: prescaler 8/9, MOD=2, phase=1
-    0x78005E42,  # R2: R=1, CP=5 mA, MUXOUT=digital lock detect, low-spur
-                 # (was 0x18005E42/low-noise -- low noise/low spur select is
-                 # bits[30:29] ("11"=low spur), set to suppress the reference
-                 # sidebands seen around 500 MHz. NOT bit 31 -- that's
-                 # RESERVED per the datasheet and must stay 0; a prior edit
-                 # wrongly set it (0x98005E42), which broke PLL lock entirely)
-    0x000004B3,  # R3
-    0x00BFA03C,  # R4: RF divider /8, feedback=VCO, RF enabled, +5 dBm
-    0x00580005,  # R5: LD pin = digital lock detect
-]
+from odmr_redpitaya import ADF4351, SPI_HZ, build_registers
 
-# Same as R4 above but with bit 5 (RF Output Enable) cleared -- written at the
-# end to kill the RF output instead of leaving it transmitting at 500 MHz.
-R4_RF_OFF = REGISTERS_500MHZ[4] & ~(1 << 5)
-
+TEST_FREQ_MHZ = 500.0
 LD_PIN = rp.RP_DIO0_P        # ADF LD is wired to DIO0_P
 LOCK_TIMEOUT_S = 10
 
-
-def open_spi(speed_hz=1_000_000):
-    spi = spidev.SpiDev()
-    spi.open(2, 0)           # /dev/spidev1.0 on the RedPitaya E2 connector
-    spi.max_speed_hz = speed_hz
-    spi.mode = 0             # CPOL=0, CPHA=0; CS rising edge = ADF LE latch
-    return spi
-
-
-def write_register(spi, value):
-    spi.xfer2([
-        (value >> 24) & 0xFF,
-        (value >> 16) & 0xFF,
-        (value >> 8) & 0xFF,
-        value & 0xFF,
-    ])
+# Same R4 the sweep would use for this frequency but with bit 5 (RF Output
+# Enable) cleared -- written at the end to kill the RF output instead of
+# leaving it transmitting at 500 MHz.
+R4_RF_OFF = build_registers(TEST_FREQ_MHZ)[4] & ~(1 << 5)
 
 
 def ld_state():
@@ -81,15 +56,11 @@ def wait_until(predicate, t_start):
 def main():
     rp.rp_Init()
     rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
-    spi = open_spi()
+    adf = ADF4351(speed_hz=SPI_HZ)
 
     try:
-        # Program R5 -> R1 first; the final R0 write launches band-select + lock.
-        for reg in REGISTERS_500MHZ[:0:-1]:      # R5, R4, R3, R2, R1
-            write_register(spi, reg)
-
         t_send = time.perf_counter()
-        write_register(spi, REGISTERS_500MHZ[0])  # R0 -- data sent, lock starts now
+        adf.set_frequency(TEST_FREQ_MHZ)  # writes R5->R1 then R0 last (triggers lock)
 
         # Writing R0 forces a VCO band-select, which drops LD low and then raises it
         # on lock. Wait through the drop (guards against reading a stale 'high'),
@@ -100,8 +71,8 @@ def main():
 
         if locked:
             print(f"LOCKED. Data-sent -> LD high: {(t_lock - t_send) * 1e3:.3f} ms")
-            print("ADF is now outputting 500 MHz continuously -- check it on the "
-                  "scope. Press Ctrl+C to stop and disable the RF output.")
+            print(f"ADF is now outputting {TEST_FREQ_MHZ:.0f} MHz continuously -- "
+                  "check it on the scope. Press Ctrl+C to stop and disable the RF output.")
             try:
                 while True:
                     time.sleep(1)
@@ -114,8 +85,8 @@ def main():
     finally:
         # Kill the RF output instead of leaving the ADF transmitting 500 MHz
         # after the script exits.
-        write_register(spi, R4_RF_OFF)
-        spi.close()
+        adf.write_register(R4_RF_OFF)
+        adf.close()
         rp.rp_Release()
 
 
