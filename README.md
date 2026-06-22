@@ -9,11 +9,17 @@ drives the ADF4351 over SPI and digitizes the photodiode on its fast ADC.
 
 ```
 redpitaya/   Scripts that run ON the RedPitaya (Python 3, needs `rp` + `spidev`, run as root)
-  odmr_redpitaya.py     Single ODMR sweep: per point, lock the PLL then average IN1.  <- main experiment
-  odmr_repeat_sweeps.py Run the sweep N times, one CSV per run (reuses odmr_redpitaya.py).
+  diag_spi_alive.py     Diagnostic: prove the SPI path by forcing LD high/low via R5 (no lock needed). Run first.
+  set_frequency.py      Continuously output any single frequency; LD read as a status flag only.
+  odmr_sweep_robust.py  Averaged repeated sweeps using a FIXED settle time (never blocks on LD).  <- main experiment
+  odmr_redpitaya.py     Original single sweep: per point, wait for the LD lock edge then average IN1.
+  odmr_repeat_sweeps.py Run odmr_redpitaya.py's sweep N times, one CSV per run.
   record_photodiode.py  Log IN1 (photodiode) for a fixed duration, e.g. 10 minutes.
-  test_500mhz_locktime.py  Bench test: program 500 MHz, time the PLL lock.
+  lock_diagnostic_sweep.py  Dwell at each frequency so a human can watch the scope + D3 LED.
+  test_500mhz_locktime.py   Bench test: program 500 MHz, time the PLL lock.
   outputsine.py         Quick OUT2 sine generator sanity check.
+
+See TROUBLESHOOTING_GUIDE.md for the full hardware/software debugging roadmap.
 
   All three data-producing scripts write under a `data/` subfolder relative
   to wherever they're run (e.g. `/root/data/...`), so one Task Scheduler job
