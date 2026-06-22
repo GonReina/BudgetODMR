@@ -100,10 +100,21 @@ def build_registers(freq_mhz):
         frac_val = 0
         int_val += 1
 
+    # A channel is genuinely integer-N only when FRAC lands on exactly 0. The
+    # datasheet calls for different lock-detect/PFD settings in that case:
+    # LDF=1 (R2 bit 8) for correct integer-N digital lock detect, and a 3 ns
+    # antibacklash pulse + charge cancellation (R3 bits 21/20) to suppress
+    # PFD spurs. Using the fractional-N values on a true integer-N channel
+    # causes marginal/false lock detection -- the rest of build_registers()
+    # uses fractional-N defaults since the sweep is fractional-N almost
+    # everywhere, but a handful of sweep points (every 25 MHz) and the
+    # 500 MHz bench test are integer-N, so this has to be conditional.
+    is_integer_n = frac_val == 0
+
     r0 = (int_val << 15) | (frac_val << 3) | 0x0           # INT, FRAC, ctrl 000
     r1 = (1 << 27) | (1 << 15) | (MOD_VAL << 3) | 0x1      # presc 8/9, phase=1, MOD
-    r2 = 0x18005E42                                         # R=1, CP=5mA, MUX=DLD
-    r3 = 0x000004B3                                         # frac-N defaults
+    r2 = 0x18005E42 | ((1 << 8) if is_integer_n else 0)     # R=1, CP=5mA, MUX=DLD, LDF
+    r3 = 0x000004B3 | ((1 << 21) | (1 << 20) if is_integer_n else 0)  # ABP, charge cancel
     r4 = (1 << 23) | (rf_div_sel << 20) | (250 << 12) | 0x3C  # fb=VCO, divsel, +5dBm
     r5 = 0x00580005                                         # LD pin = digital LD
     return [r0, r1, r2, r3, r4, r5]

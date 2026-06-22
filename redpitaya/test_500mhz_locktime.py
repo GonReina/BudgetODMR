@@ -30,10 +30,7 @@ import rp
 
 from odmr_redpitaya import ADF4351, SPI_HZ, build_registers
 
-TEST_FREQ_MHZ = 1200.0  # diagnostic: same VCO target (2400 MHz) as the 300 MHz
-                        # test that just failed, but reached via /2 instead of
-                        # /8 -- isolates whether the /8 divider itself is at
-                        # fault vs. the VCO target. Set back to 500.0 once done.
+TEST_FREQ_MHZ = 500.0
 LD_PIN = rp.RP_DIO0_P        # ADF LD is wired to DIO0_P
 LOCK_TIMEOUT_S = 10
 
