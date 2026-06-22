@@ -30,7 +30,9 @@ import rp
 
 from odmr_redpitaya import ADF4351, SPI_HZ, build_registers
 
-TEST_FREQ_MHZ = 500.0
+TEST_FREQ_MHZ = 300.0  # diagnostic: same /8 divider as the 500 MHz case (VCO=2400
+                       # MHz) but mid-band instead of near the chip's 4400 MHz
+                       # ceiling -- set back to 500.0 once this is confirmed/ruled out
 LD_PIN = rp.RP_DIO0_P        # ADF LD is wired to DIO0_P
 LOCK_TIMEOUT_S = 10
 
