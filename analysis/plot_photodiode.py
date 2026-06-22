@@ -2,17 +2,20 @@
 Plot a photodiode time series recorded by redpitaya/record_photodiode.py.
 
 Reads the "t_s,pl_mean_v,pl_std_v" CSV (ignoring the '#' header lines) and
-plots photoluminescence vs time, with a shaded +/-1 standard-deviation band.
-A dashed line marks the overall mean so drift is easy to see.
+shows two views: photoluminescence vs time (with a +/-1 sd band and mean
+line), and an FFT of that same trace, so periodic noise (drift, flicker,
+mains-related beats) shows up as a distinct peak instead of being buried in
+a broadband random-noise floor.
 
 Edit the CONFIGURATION block and run on your PC:  python3 plot_photodiode.py
-Requires matplotlib:  pip install matplotlib
+Requires matplotlib and numpy:  pip install matplotlib numpy
 """
 
 import csv
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
@@ -42,16 +45,35 @@ def main():
     lo = [m - s for m, s in zip(mean, std)]
     hi = [m + s for m, s in zip(mean, std)]
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.fill_between(t, lo, hi, color="tab:blue", alpha=0.2, label="+/-1 sd")
-    ax.plot(t, mean, "-", lw=1.0, color="tab:blue", label="PL mean")
-    ax.axhline(avg, color="tab:red", ls="--", lw=1, label=f"mean = {avg:.4f} V")
+    # FFT of the mean trace. Points are logged roughly every SAMPLE_PERIOD_S
+    # but not perfectly evenly spaced, so use the median spacing as the
+    # effective sample rate. A narrow peak = periodic/correlated noise; a
+    # flat-ish floor = dominated by random noise.
+    dt = float(np.median(np.diff(t)))
+    fs = 1.0 / dt
+    detrended = (np.asarray(mean) - avg) * np.hanning(len(mean))
+    spectrum = np.abs(np.fft.rfft(detrended))
+    freqs_fft = np.fft.rfftfreq(len(mean), d=dt)
 
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Photoluminescence (V)")
-    ax.set_title(f"Photodiode recording ({t[-1]:.0f} s, {len(t)} points)")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+
+    ax1.fill_between(t, lo, hi, color="tab:blue", alpha=0.2, label="+/-1 sd")
+    ax1.plot(t, mean, "-", lw=1.0, color="tab:blue", label="PL mean")
+    ax1.axhline(avg, color="tab:red", ls="--", lw=1, label=f"mean = {avg:.4f} V")
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Photoluminescence (V)")
+    ax1.set_title(f"Photodiode recording ({t[-1]:.0f} s, {len(t)} points, "
+                   f"fs~{fs:.2f} Hz)")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Skip the DC bin (index 0) -- it's ~0 after removing the mean anyway.
+    ax2.semilogy(freqs_fft[1:], spectrum[1:], lw=1.0, color="tab:purple")
+    ax2.set_xlabel("Frequency (Hz)")
+    ax2.set_ylabel("Amplitude (a.u., log scale)")
+    ax2.set_title("FFT of PL mean -- look for narrow peaks above the noise floor")
+    ax2.grid(True, alpha=0.3, which="both")
+
     fig.tight_layout()
 
     if SAVE_FIG:

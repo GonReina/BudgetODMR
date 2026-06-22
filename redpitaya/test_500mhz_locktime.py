@@ -9,6 +9,10 @@ Wiring (as built):
   3V3 -> ADF VDD and CE,  LD -> DIO0_P,  common ground
   ADF RF output -> oscilloscope (expect a single ~500 MHz tone)
 
+The RF output is disabled again once the lock time has been measured, so the
+ADF stops transmitting when the script exits instead of being left running
+at 500 MHz.
+
 Note: the `rp` digital-pin calls (RP_DIO0_P, rp_DpinGetState, RP_HIGH/RP_LOW)
 can vary by RedPitaya OS version. They're isolated in ld_state()/setup below;
 run `help(rp)` if a name differs on your image.
@@ -30,6 +34,10 @@ REGISTERS_500MHZ = [
     0x00BFA03C,  # R4: RF divider /8, feedback=VCO, RF enabled, +5 dBm
     0x00580005,  # R5: LD pin = digital lock detect
 ]
+
+# Same as R4 above but with bit 5 (RF Output Enable) cleared -- written at the
+# end to kill the RF output instead of leaving it transmitting at 500 MHz.
+R4_RF_OFF = REGISTERS_500MHZ[4] & ~(1 << 5)
 
 LD_PIN = rp.RP_DIO0_P        # ADF LD is wired to DIO0_P
 LOCK_TIMEOUT_S = 0.5
@@ -70,30 +78,35 @@ def main():
     rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
     spi = open_spi()
 
-    # Program R5 -> R1 first; the final R0 write launches band-select + lock.
-    for reg in REGISTERS_500MHZ[:0:-1]:      # R5, R4, R3, R2, R1
-        write_register(spi, reg)
+    try:
+        # Program R5 -> R1 first; the final R0 write launches band-select + lock.
+        for reg in REGISTERS_500MHZ[:0:-1]:      # R5, R4, R3, R2, R1
+            write_register(spi, reg)
 
-    t_send = time.perf_counter()
-    write_register(spi, REGISTERS_500MHZ[0])  # R0 -- data sent, lock starts now
+        t_send = time.perf_counter()
+        write_register(spi, REGISTERS_500MHZ[0])  # R0 -- data sent, lock starts now
 
-    # Writing R0 forces a VCO band-select, which drops LD low and then raises it
-    # on lock. Wait through the drop (guards against reading a stale 'high'),
-    # then time to the lock edge.
-    wait_until(lambda: not ld_state(), t_send)   # LD goes low (re-acquiring)
-    locked = wait_until(ld_state, t_send)        # LD goes high (locked)
-    t_lock = time.perf_counter()
+        # Writing R0 forces a VCO band-select, which drops LD low and then raises it
+        # on lock. Wait through the drop (guards against reading a stale 'high'),
+        # then time to the lock edge.
+        wait_until(lambda: not ld_state(), t_send)   # LD goes low (re-acquiring)
+        locked = wait_until(ld_state, t_send)        # LD goes high (locked)
+        t_lock = time.perf_counter()
 
-    if locked:
-        print(f"LOCKED. Data-sent -> LD high: {(t_lock - t_send) * 1e3:.3f} ms")
-        print("ADF should now be outputting 500 MHz -- check it on the scope.")
-    else:
-        print(f"NO LOCK within {LOCK_TIMEOUT_S * 1e3:.0f} ms.")
-        print("Check: ADF VDD on 3.3 V, CE high, common ground, LD -> DIO0_P,")
-        print("       SPI wiring, and /dev/spidev1.0 exists.")
-
-    spi.close()
-    rp.rp_Release()
+        if locked:
+            print(f"LOCKED. Data-sent -> LD high: {(t_lock - t_send) * 1e3:.3f} ms")
+            print("ADF was outputting 500 MHz -- check it on the scope. "
+                  "Disabling RF output now.")
+        else:
+            print(f"NO LOCK within {LOCK_TIMEOUT_S * 1e3:.0f} ms.")
+            print("Check: ADF VDD on 3.3 V, CE high, common ground, LD -> DIO0_P,")
+            print("       SPI wiring, and /dev/spidev1.0 exists.")
+    finally:
+        # Kill the RF output instead of leaving the ADF transmitting 500 MHz
+        # after the script exits.
+        write_register(spi, R4_RF_OFF)
+        spi.close()
+        rp.rp_Release()
 
 
 if __name__ == "__main__":
