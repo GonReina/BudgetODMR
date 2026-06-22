@@ -24,7 +24,7 @@ import rp
 from odmr_redpitaya import ADF4351, SPI_HZ, build_registers
 
 START_FREQ_MHZ = 500.0
-STOP_FREQ_MHZ = 80.0
+STOP_FREQ_MHZ = 800.0
 STEP_MHZ = -20.0      # negative: sweeping downward
 DWELL_S = 10.0         # time spent at each frequency before moving on
 
