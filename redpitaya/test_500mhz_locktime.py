@@ -29,7 +29,9 @@ import rp
 REGISTERS_500MHZ = [
     0x00500000,  # R0: INT=160 (VCO = 160 * 25 MHz = 4000 MHz), FRAC=0
     0x08008011,  # R1: prescaler 8/9, MOD=2, phase=1
-    0x18005E42,  # R2: R=1, CP=5 mA, MUXOUT=digital lock detect, low-noise
+    0x98005E42,  # R2: R=1, CP=5 mA, MUXOUT=digital lock detect, low-spur
+                 # (was 0x18005E42/low-noise -- switched to suppress the
+                 # reference-spur sidebands seen around 500 MHz on the scope)
     0x000004B3,  # R3
     0x00BFA03C,  # R4: RF divider /8, feedback=VCO, RF enabled, +5 dBm
     0x00580005,  # R5: LD pin = digital lock detect
