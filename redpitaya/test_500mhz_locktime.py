@@ -9,9 +9,9 @@ Wiring (as built):
   3V3 -> ADF VDD and CE,  LD -> DIO0_P,  common ground
   ADF RF output -> oscilloscope (expect a single ~500 MHz tone)
 
-The RF output is disabled again once the lock time has been measured, so the
-ADF stops transmitting when the script exits instead of being left running
-at 500 MHz.
+Once locked, the RF output is held on continuously until you press Ctrl+C --
+only then is it disabled, so the ADF doesn't keep transmitting after the
+script has actually ended.
 
 Note: the `rp` digital-pin calls (RP_DIO0_P, rp_DpinGetState, RP_HIGH/RP_LOW)
 can vary by RedPitaya OS version. They're isolated in ld_state()/setup below;
@@ -95,8 +95,13 @@ def main():
 
         if locked:
             print(f"LOCKED. Data-sent -> LD high: {(t_lock - t_send) * 1e3:.3f} ms")
-            print("ADF was outputting 500 MHz -- check it on the scope. "
-                  "Disabling RF output now.")
+            print("ADF is now outputting 500 MHz continuously -- check it on the "
+                  "scope. Press Ctrl+C to stop and disable the RF output.")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\nStopping.")
         else:
             print(f"NO LOCK within {LOCK_TIMEOUT_S * 1e3:.0f} ms.")
             print("Check: ADF VDD on 3.3 V, CE high, common ground, LD -> DIO0_P,")
