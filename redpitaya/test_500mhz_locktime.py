@@ -40,12 +40,12 @@ REGISTERS_500MHZ = [
 R4_RF_OFF = REGISTERS_500MHZ[4] & ~(1 << 5)
 
 LD_PIN = rp.RP_DIO0_P        # ADF LD is wired to DIO0_P
-LOCK_TIMEOUT_S = 0.5
+LOCK_TIMEOUT_S = 10
 
 
 def open_spi(speed_hz=1_000_000):
     spi = spidev.SpiDev()
-    spi.open(1, 0)           # /dev/spidev1.0 on the RedPitaya E2 connector
+    spi.open(2, 0)           # /dev/spidev1.0 on the RedPitaya E2 connector
     spi.max_speed_hz = speed_hz
     spi.mode = 0             # CPOL=0, CPHA=0; CS rising edge = ADF LE latch
     return spi
