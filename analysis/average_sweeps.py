@@ -41,6 +41,8 @@ SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average.png")   # None to skip saving
 
 REQUIRE_LOCK        = False    # drop points with lock flag == 0 (needs MONITOR_LD=True sweeps)
 NORMALIZE_PER_SWEEP = True    # divide each sweep by its own median before averaging
+USE_MEDIAN          = True    # combine runs with median (robust to an occasional bad/noisy
+                              # run or one-point glitch) instead of mean
 
 
 def load_spectrum(path):
@@ -121,8 +123,9 @@ def main():
         if not vals:
             dropped += 1
             continue
-        m = sum(vals) / len(vals)
-        var = sum((v - m) ** 2 for v in vals) / len(vals)
+        m = median(vals) if USE_MEDIAN else sum(vals) / len(vals)
+        mean_v = sum(vals) / len(vals)
+        var = sum((v - mean_v) ** 2 for v in vals) / len(vals)
         freqs.append(fr)
         means.append(m)
         stds.append(math.sqrt(var))

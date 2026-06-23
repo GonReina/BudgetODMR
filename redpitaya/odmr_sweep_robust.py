@@ -68,8 +68,14 @@ SPI_HZ  = 1_000_000
 LD_PIN  = rp.RP_DIO0_P
 MONITOR_LD = False         # see set_frequency.py; LD wire adds a ground path that hurts lock
 
-# samples to average = whole mains cycles inside INTEGRATION_MS
-N_INTEG = min(N_BUF, int(round(INTEGRATION_MS / 1000.0 * FS_HZ)))
+# Mains-clean integration. One ADC buffer holds 134 ms max, and 100 ms is an
+# integer number of mains cycles for BOTH 50 Hz (5) and 60 Hz (6), so a 100 ms
+# "sub-read" cancels hum every time. Longer integration is built by AVERAGING
+# several sub-reads -- never by widening one buffer past 100 ms (that is 6.7
+# cycles, leaves residual hum, and is the usual cause of run-to-run noise).
+SUBREAD_MS = 100.0
+N_SUBREAD  = min(N_BUF, int(round(SUBREAD_MS / 1000.0 * FS_HZ)))   # ~12207 samples
+N_SUB      = max(1, int(round(INTEGRATION_MS / SUBREAD_MS)))       # sub-reads per reading
 
 # ============================================================================
 # ADF4351 register math (verified)
@@ -138,9 +144,9 @@ def ld_high():
     return rp.rp_DpinGetState(LD_PIN)[1] == rp.RP_HIGH
 
 
-def integrate(buff):
-    """One long block capture; return the mean of the first N_INTEG samples
-    (= whole mains cycles), which is the integrated photodiode level."""
+def subread(buff):
+    """One mains-clean block capture; mean of the first N_SUBREAD samples
+    (= a whole number of mains cycles)."""
     rp.rp_AcqReset()
     rp.rp_AcqSetDecimation(DECIMATION)
     rp.rp_AcqSetTriggerDelay(N_BUF)
@@ -150,9 +156,18 @@ def integrate(buff):
         pass
     rp.rp_AcqGetOldestDataV(ADC_CHANNEL, N_BUF, buff)
     total = 0.0
-    for i in range(N_INTEG):
+    for i in range(N_SUBREAD):
         total += buff[i]
-    return total / N_INTEG
+    return total / N_SUBREAD
+
+
+def integrate(buff):
+    """Median of N_SUB mains-clean sub-reads. Median (not mean) rejects a single
+    transient sub-read (e.g. a momentary PLL unlock) that would otherwise show as
+    a sharp one-point spike."""
+    vals = sorted(subread(buff) for _ in range(N_SUB))
+    n = len(vals)
+    return vals[n // 2] if n % 2 else 0.5 * (vals[n // 2 - 1] + vals[n // 2])
 
 
 def measure_point(adf, buff, freq_mhz):
@@ -189,11 +204,12 @@ def main():
     if avg_dir:
         os.makedirs(avg_dir, exist_ok=True)
 
-    pt_time = (2 if MW_ON_OFF else 1) * (SETTLE_S + N_BUF / FS_HZ)
+    integ_ms = N_SUB * N_SUBREAD / FS_HZ * 1e3
+    pt_time = (2 if MW_ON_OFF else 1) * (SETTLE_S + N_SUB * N_BUF / FS_HZ)
     print(f"ODMR: {F_START_MHZ}-{F_STOP_MHZ} MHz / {F_STEP_MHZ} ({len(freqs)} pts), "
           f"{N_SWEEPS} sweeps")
-    print(f"  integrate {N_INTEG/FS_HZ*1e3:.0f} ms/reading, MW_on_off={MW_ON_OFF}, "
-          f"~{pt_time*len(freqs):.0f}s/sweep")
+    print(f"  integrate {integ_ms:.0f} ms/reading ({N_SUB}x{SUBREAD_MS:.0f}ms), "
+          f"MW_on_off={MW_ON_OFF}, ~{pt_time*len(freqs):.0f}s/sweep")
 
     rp.rp_Init()
     if MONITOR_LD:
@@ -210,7 +226,7 @@ def main():
             with open(run_path, "w") as f:
                 f.write(f"# run {run}/{N_SWEEPS}, "
                         f"{datetime.now().isoformat(timespec='seconds')}\n")
-                f.write(f"# integrate_ms={N_INTEG/FS_HZ*1e3:.1f} mw_on_off={MW_ON_OFF} "
+                f.write(f"# integrate_ms={integ_ms:.1f} mw_on_off={MW_ON_OFF} "
                         f"signal={'PL_on/PL_off' if MW_ON_OFF else 'mean_volts'}\n")
                 f.write("freq_MHz,signal,ld\n")
                 for idx, freq in enumerate(freqs):
