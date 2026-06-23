@@ -17,9 +17,7 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026"
-INPUT_FILE = os.path.join(DATA_DIR, "odmr_average.csv")
-SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average.png")   # set to None to skip saving
+DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026\odmr_runs"# set to None to skip saving
 
 
 def load_spectrum(path):
@@ -61,4 +59,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    for i in range(1, 20):
+        INPUT_FILE = os.path.join(DATA_DIR, f"run_0{i}.csv")
+        SAVE_FIG   = os.path.join(DATA_DIR, f"run_0{i}.png")   
+        if i > 9:
+            INPUT_FILE = os.path.join(DATA_DIR, f"run_{i}.csv")
+            SAVE_FIG   = os.path.join(DATA_DIR, f"run_{i}.png")
+        main()
+

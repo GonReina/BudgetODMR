@@ -33,7 +33,7 @@ import os
 import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
-DATA_DIR   = r"D:\data"
+DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026"
 RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs")
 RUNS_GLOB  = "run_*.csv"
 OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average.csv")
