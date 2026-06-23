@@ -19,9 +19,10 @@ import numpy as np
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = r"D:\data"
+DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026"
 INPUT_FILE = os.path.join(DATA_DIR, "photodiode_laser_on.csv")
 SAVE_FIG   = os.path.join(DATA_DIR, "photodiode_laser_on.png")   # set to None to skip saving
+
 
 
 def load_series(path):
