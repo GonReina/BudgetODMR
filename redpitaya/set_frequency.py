@@ -24,7 +24,7 @@ import rp
 # ============================================================================
 # CONFIG -- edit, then run
 # ============================================================================
-FREQ_MHZ  = 500.0       # any value 35 .. 4400 MHz
+FREQ_MHZ  = 669.0       # any value 35 .. 4400 MHz
 REF_MHZ   = 25.0        # on-board TCXO
 MOD_VAL   = 1000        # fractional modulus -> 25 kHz channel raster at 25 MHz PFD
 POWER_DBM = 5           # output power: -4, -1, +2, or +5 dBm (see _PWR table)
