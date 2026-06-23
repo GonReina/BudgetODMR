@@ -1,25 +1,28 @@
 """
-Robust, repeatable, averaged ODMR sweep -- records the photodiode (fast ADC IN1)
-while stepping the ADF4351 across a frequency range, many times, and averaging.
+Robust, repeatable, averaged ODMR sweep -- records the BPW34 photodiode (fast ADC
+IN1) while stepping the ADF4351 across a frequency range, many times, averaging.
 
-Why this exists (vs odmr_redpitaya.py)
---------------------------------------
-The original sweep arms the ADC on the LD *rising edge* for every point. If lock
-detect is even slightly flaky (marginal supply, integer-N LDF bug, etc.) the run
-stalls or times out. For a budget rig the dependable approach is:
+Design notes
+------------
+* No dependence on lock detect. It programs the frequency, waits a FIXED settle
+  time, then captures -- so a flaky LD pin can't stall the run. LD is only read
+  (optionally) as a logged quality flag.
 
-    program frequency -> wait a FIXED settle time -> capture -> average
+* LONG INTEGRATION per point (the key noise win). A budget photodiode + op-amp on
+  a fast ADC is wideband and noisy; the reference paper's TSL2591 wins by
+  integrating ~100 ms per reading, which hardware-averages fast noise and mains
+  hum. We emulate that: each point integrates over INTEGRATION_MS, and 100 ms is
+  an integer number of cycles for BOTH 50 Hz (5) and 60 Hz (6), so mains hum
+  cancels. This is usually what makes a buried dip appear.
 
-The PLL settles in well under a millisecond; a few-ms fixed dwell is plenty. LD is
-still *read* and logged per point as a quality flag, but acquisition never blocks
-on it, so one bad point can't kill the sweep.
+* Optional MW ON/OFF per point (MW_ON_OFF). Measures PL with the microwaves on,
+  then muted, and records the ratio PL_on/PL_off. Slow laser-intensity drift
+  divides out, giving true fractional ODMR contrast -- the budget gold standard.
 
-It runs the whole sweep N_SWEEPS times and keeps a running average across runs, so
-noise drops as ~1/sqrt(N_SWEEPS * AVERAGES_PER_POINT). Many fast sweeps beat a few
-slow ones because slow laser drift averages out across runs instead of tilting a
-single long baseline. Outputs:
-    data/odmr_runs/run_01.csv ...   one CSV per sweep (freq_MHz,pl_volts,ld)
-    data/odmr_average.csv           running average over all completed sweeps
+Outputs (everything under data/ is synced to the PC):
+    data/odmr_runs/run_01.csv ...  per sweep: freq_MHz,signal,ld
+                                   signal = PL_on/PL_off if MW_ON_OFF else mean volts
+    data/odmr_average.csv          running average, rewritten after every sweep
 
 Run on the Red Pitaya as root:   sudo python3 odmr_sweep_robust.py
 Plot with (on the PC):           python3 analysis/average_sweeps.py
@@ -39,32 +42,34 @@ F_START_MHZ = 2800.0
 F_STOP_MHZ  = 2920.0
 F_STEP_MHZ  = 1.0
 
-N_SWEEPS           = 10      # full sweeps to average together
-AVERAGES_PER_POINT = 4       # ADC block captures averaged at each frequency
-SETTLE_S           = 0.005   # fixed dwell after programming, before capturing (>> lock time)
+N_SWEEPS       = 20        # full sweeps to average together
+INTEGRATION_MS = 100.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
+SETTLE_S       = 0.010     # dwell after (re)programming before integrating
+MW_ON_OFF      = True      # True = measure PL_on/PL_off per point (cancels laser drift)
 
-output_dir = r"root/data/BudgetODMR/23-06-2026"
-os.chdir(output_dir)
-RUNS_DIR    = "odmr_runs"
-AVG_FILE    = "odmr_average.csv"
+RUNS_DIR = "data/odmr_runs"
+AVG_FILE = "data/odmr_average.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
 POWER_DBM = 5
 
-# Fast ADC (photodiode on IN1)
+# Fast ADC (photodiode on IN1). DEC_1024 -> fs = 122.07 kS/s, 16384-sample buffer
+# = 134 ms, enough to hold a 100 ms integration window.
 ADC_CHANNEL = rp.RP_CH_1
-DECIMATION  = rp.RP_DEC_64      # ~8 ms per 16384-sample block
-N_SAMPLES   = 16384
+DECIMATION  = rp.RP_DEC_1024
+FS_HZ       = 125e6 / 1024
+N_BUF       = 16384
 
 # ADF4351 SPI
-SPI_BUS = 2                     # Gen-2 RP = /dev/spidev2.0; Gen-1 = 1
+SPI_BUS = 2                # Gen-2 RP = /dev/spidev2.0; Gen-1 = 1
 SPI_DEV = 0
 SPI_HZ  = 1_000_000
 LD_PIN  = rp.RP_DIO0_P
-MONITOR_LD = True              # False = ignore LD entirely (wire disconnected). The LD
-                                # wire adds a ground path that disturbs lock; this sweep
-                                # uses a fixed settle, so it does NOT need LD. Recommended.
+MONITOR_LD = False         # see set_frequency.py; LD wire adds a ground path that hurts lock
+
+# samples to average = whole mains cycles inside INTEGRATION_MS
+N_INTEG = min(N_BUF, int(round(INTEGRATION_MS / 1000.0 * FS_HZ)))
 
 # ============================================================================
 # ADF4351 register math (verified)
@@ -115,13 +120,15 @@ class ADF4351:
                         (value >> 8) & 0xFF, value & 0xFF])
 
     def set_frequency(self, freq_mhz):
-        regs = build_registers(freq_mhz)
-        for reg in reversed(regs):        # R5->R0, R0 last triggers lock
+        self._regs = build_registers(freq_mhz)
+        for reg in reversed(self._regs):      # R5->R0, R0 last triggers lock
             self.write_register(reg)
-        return regs
 
-    def mute(self, freq_mhz):
-        self.write_register(build_registers(freq_mhz)[4] & ~(1 << 5))
+    def rf_off(self):
+        self.write_register(self._regs[4] & ~(1 << 5))   # clear RF-enable -> mute
+
+    def rf_on(self):
+        self.write_register(self._regs[4])               # restore R4 (RF enabled)
 
     def close(self):
         self.spi.close()
@@ -131,30 +138,38 @@ def ld_high():
     return rp.rp_DpinGetState(LD_PIN)[1] == rp.RP_HIGH
 
 
-def capture_mean(buff):
-    """Immediate-trigger block capture -> mean voltage (no dependence on LD)."""
+def integrate(buff):
+    """One long block capture; return the mean of the first N_INTEG samples
+    (= whole mains cycles), which is the integrated photodiode level."""
     rp.rp_AcqReset()
     rp.rp_AcqSetDecimation(DECIMATION)
-    rp.rp_AcqSetTriggerDelay(N_SAMPLES)
+    rp.rp_AcqSetTriggerDelay(N_BUF)
     rp.rp_AcqStart()
     rp.rp_AcqSetTriggerSrc(rp.RP_TRIG_SRC_NOW)
     while rp.rp_AcqGetBufferFillState()[1] is False:
         pass
-    rp.rp_AcqGetOldestDataV(ADC_CHANNEL, N_SAMPLES, buff)
+    rp.rp_AcqGetOldestDataV(ADC_CHANNEL, N_BUF, buff)
     total = 0.0
-    for i in range(N_SAMPLES):
+    for i in range(N_INTEG):
         total += buff[i]
-    return total / N_SAMPLES
+    return total / N_INTEG
 
 
 def measure_point(adf, buff, freq_mhz):
     adf.set_frequency(freq_mhz)
-    time.sleep(SETTLE_S)                  # fixed dwell -- robust against flaky LD
-    ld = (1 if ld_high() else 0) if MONITOR_LD else 0   # quality flag only (0 if not wired)
-    total = 0.0
-    for _ in range(AVERAGES_PER_POINT):
-        total += capture_mean(buff)
-    return total / AVERAGES_PER_POINT, ld
+    time.sleep(SETTLE_S)
+    ld = (1 if ld_high() else 0) if MONITOR_LD else 0
+    pl_on = integrate(buff)
+
+    if MW_ON_OFF:
+        adf.rf_off()
+        time.sleep(SETTLE_S)
+        pl_off = integrate(buff)
+        adf.rf_on()                      # leave RF on for the next step's transition
+        signal = pl_on / pl_off if pl_off else 0.0
+    else:
+        signal = pl_on
+    return signal, ld
 
 
 # ============================================================================
@@ -174,58 +189,53 @@ def main():
     if avg_dir:
         os.makedirs(avg_dir, exist_ok=True)
 
-    print(f"Robust ODMR: {F_START_MHZ}-{F_STOP_MHZ} MHz / {F_STEP_MHZ} MHz "
-          f"({len(freqs)} pts), {AVERAGES_PER_POINT} avg/pt, {N_SWEEPS} sweeps, "
-          f"{SETTLE_S*1e3:.0f} ms settle")
+    pt_time = (2 if MW_ON_OFF else 1) * (SETTLE_S + N_BUF / FS_HZ)
+    print(f"ODMR: {F_START_MHZ}-{F_STOP_MHZ} MHz / {F_STEP_MHZ} ({len(freqs)} pts), "
+          f"{N_SWEEPS} sweeps")
+    print(f"  integrate {N_INTEG/FS_HZ*1e3:.0f} ms/reading, MW_on_off={MW_ON_OFF}, "
+          f"~{pt_time*len(freqs):.0f}s/sweep")
 
     rp.rp_Init()
     if MONITOR_LD:
         rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
-    buff = rp.fBuffer(N_SAMPLES)
+    buff = rp.fBuffer(N_BUF)
     adf = ADF4351()
 
     running_sum = [0.0] * len(freqs)
-    ld_hits     = [0]   * len(freqs)
-    completed   = 0
-    last_freq   = freqs[-1]
+    completed = 0
 
     try:
         for run in range(1, N_SWEEPS + 1):
             run_path = os.path.join(RUNS_DIR, f"run_{run:02d}.csv")
-            n_locked = 0
             with open(run_path, "w") as f:
                 f.write(f"# run {run}/{N_SWEEPS}, "
                         f"{datetime.now().isoformat(timespec='seconds')}\n")
-                f.write(f"# start={F_START_MHZ} stop={F_STOP_MHZ} "
-                        f"step={F_STEP_MHZ} MHz avg/pt={AVERAGES_PER_POINT}\n")
-                f.write("freq_MHz,pl_volts,ld\n")
+                f.write(f"# integrate_ms={N_INTEG/FS_HZ*1e3:.1f} mw_on_off={MW_ON_OFF} "
+                        f"signal={'PL_on/PL_off' if MW_ON_OFF else 'mean_volts'}\n")
+                f.write("freq_MHz,signal,ld\n")
                 for idx, freq in enumerate(freqs):
-                    pl, ld = measure_point(adf, buff, freq)
-                    last_freq = freq
-                    f.write(f"{freq:.4f},{pl:.6f},{ld}\n")
-                    running_sum[idx] += pl
-                    ld_hits[idx] += ld
-                    n_locked += ld
+                    sig, ld = measure_point(adf, buff, freq)
+                    f.write(f"{freq:.4f},{sig:.6f},{ld}\n")
+                    running_sum[idx] += sig
             completed += 1
 
-            # rewrite the running-average file after every completed sweep
             with open(AVG_FILE, "w") as f:
                 f.write(f"# running average over {completed} sweep(s), "
                         f"{datetime.now().isoformat(timespec='seconds')}\n")
-                f.write("freq_MHz,pl_volts_avg,ld_fraction\n")
+                f.write("freq_MHz,signal_avg\n")
                 for idx, freq in enumerate(freqs):
-                    f.write(f"{freq:.4f},{running_sum[idx]/completed:.6f},"
-                            f"{ld_hits[idx]/completed:.3f}\n")
+                    f.write(f"{freq:.4f},{running_sum[idx]/completed:.6f}\n")
 
-            print(f"  sweep {run}/{N_SWEEPS} done  "
-                  f"(LD high on {n_locked}/{len(freqs)} pts)  -> {AVG_FILE}")
+            print(f"  sweep {run}/{N_SWEEPS} done -> {AVG_FILE}")
 
         print(f"\nDone. {completed} sweeps averaged -> {AVG_FILE}")
     except KeyboardInterrupt:
-        print(f"\nStopped early after {completed} sweep(s). "
-              f"Average so far in {AVG_FILE}")
+        print(f"\nStopped early after {completed} sweep(s). Average in {AVG_FILE}")
     finally:
-        adf.mute(last_freq)
+        try:
+            adf.rf_off()
+        except Exception:
+            pass
         adf.close()
         rp.rp_Release()
 
