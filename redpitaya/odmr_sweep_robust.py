@@ -43,12 +43,12 @@ F_STOP_MHZ  = 2920.0
 F_STEP_MHZ  = 1.0
 
 N_SWEEPS       = 20        # full sweeps to average together
-INTEGRATION_MS = 100.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
-SETTLE_S       = 0.010     # dwell after (re)programming before integrating
+INTEGRATION_MS = 600.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
+SETTLE_S       = 0.10     # dwell after (re)programming before integrating
 MW_ON_OFF      = True      # True = measure PL_on/PL_off per point (cancels laser drift)
-os.chdir(r"root/data/BudgetOMDR/23-06-2026")
-RUNS_DIR = "data/odmr_runs2"
-AVG_FILE = "data/odmr_average2.csv"
+os.chdir(r"/root/data/BudgetODMR/23-06-2026")
+RUNS_DIR = "data/odmr_runs3"
+AVG_FILE = "data/odmr_average3.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
