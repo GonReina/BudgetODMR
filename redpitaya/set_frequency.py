@@ -8,13 +8,13 @@ Use this to:
 
 It programs correct integer-N / fractional-N registers (including LDF=1 on
 integer-N channels, which the old bench test got wrong), latches them R5->R0,
-then reads the LD pin purely as a STATUS flag -- it never blocks on LD, so a
-flaky lock pin can't hang the script. The tone stays on until you press Ctrl+C.
+then optionally reads the LD pin purely as a STATUS flag -- it never blocks on
+LD. The tone stays on until you press Ctrl+C.
 
 Run on the Red Pitaya as root:   sudo python3 set_frequency.py
 
-Wiring: same as the rest of the project (E2 SPI -> CLK/DATA/LE, LD -> DIO0_P,
-VDD/CE 3.0-3.6 V, common ground, RFOUT -> scope / SPF5189).
+Wiring: same as the rest of the project (E2 SPI -> CLK/DATA/LE, VDD/CE 3.0-3.6 V,
+common ground, RFOUT -> scope / SPF5189). LD -> DIO0_P only if MONITOR_LD = True.
 """
 
 import time
@@ -33,6 +33,9 @@ SPI_BUS   = 2           # Gen-2 RP = /dev/spidev2.0; Gen-1 = 1
 SPI_DEV   = 0
 SPI_HZ    = 1_000_000
 LD_PIN    = rp.RP_DIO0_P
+MONITOR_LD = False      # False = don't touch DIO0_P at all (LD wire left disconnected).
+                        # The LD wire forms an extra ground path that can disturb lock;
+                        # leaving it off is the reliable config. Set True only if LD is wired.
 
 # ============================================================================
 # Register math (verified; identical to odmr_redpitaya.build_registers)
@@ -100,12 +103,16 @@ def main():
     print("Registers: " + " ".join(f"0x{r:08X}" for r in regs))
 
     rp.rp_Init()
-    rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
+    if MONITOR_LD:
+        rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
     spi = open_spi()
     program(spi, regs)
 
     time.sleep(0.05)
-    print(f"\nLock detect: {'LOCKED (LD high)' if ld_high() else 'NOT locked (LD low)'}")
+    if MONITOR_LD:
+        print(f"\nLock detect: {'LOCKED (LD high)' if ld_high() else 'NOT locked (LD low)'}")
+    else:
+        print("\nLD not monitored (wire disconnected). Confirm the tone on the scope.")
     print("Sanity check on the scope: a clean tone at the frequency above, and if")
     print("you can reach VTUNE/CP, it should sit mid-range (~0.5-2.5 V), not at a")
     print("rail. Tone present but LD low = trust the tone; see GUIDE section 6.\n")
@@ -114,8 +121,9 @@ def main():
     try:
         while True:
             time.sleep(1.0)
-            print(f"  LD: {'high (locked)' if ld_high() else 'low  (unlocked)'}",
-                  end="\r", flush=True)
+            if MONITOR_LD:
+                print(f"  LD: {'high (locked)' if ld_high() else 'low  (unlocked)'}",
+                      end="\r", flush=True)
     except KeyboardInterrupt:
         pass
     finally:

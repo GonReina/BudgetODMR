@@ -60,6 +60,9 @@ SPI_BUS = 2                     # Gen-2 RP = /dev/spidev2.0; Gen-1 = 1
 SPI_DEV = 0
 SPI_HZ  = 1_000_000
 LD_PIN  = rp.RP_DIO0_P
+MONITOR_LD = False              # False = ignore LD entirely (wire disconnected). The LD
+                                # wire adds a ground path that disturbs lock; this sweep
+                                # uses a fixed settle, so it does NOT need LD. Recommended.
 
 # ============================================================================
 # ADF4351 register math (verified)
@@ -145,7 +148,7 @@ def capture_mean(buff):
 def measure_point(adf, buff, freq_mhz):
     adf.set_frequency(freq_mhz)
     time.sleep(SETTLE_S)                  # fixed dwell -- robust against flaky LD
-    ld = 1 if ld_high() else 0            # logged as a quality flag only
+    ld = (1 if ld_high() else 0) if MONITOR_LD else 0   # quality flag only (0 if not wired)
     total = 0.0
     for _ in range(AVERAGES_PER_POINT):
         total += capture_mean(buff)
@@ -174,7 +177,8 @@ def main():
           f"{SETTLE_S*1e3:.0f} ms settle")
 
     rp.rp_Init()
-    rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
+    if MONITOR_LD:
+        rp.rp_DpinSetDirection(LD_PIN, rp.RP_IN)
     buff = rp.fBuffer(N_SAMPLES)
     adf = ADF4351()
 
