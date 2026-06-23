@@ -35,16 +35,18 @@ import rp
 # ============================================================================
 # CONFIG -- edit, then run
 # ============================================================================
-F_START_MHZ = 2700.0
-F_STOP_MHZ  = 3000.0
+F_START_MHZ = 2800.0
+F_STOP_MHZ  = 2920.0
 F_STEP_MHZ  = 1.0
 
-N_SWEEPS           = 20      # full sweeps to average together
+N_SWEEPS           = 10      # full sweeps to average together
 AVERAGES_PER_POINT = 4       # ADC block captures averaged at each frequency
 SETTLE_S           = 0.005   # fixed dwell after programming, before capturing (>> lock time)
 
-RUNS_DIR    = "/root/data/23-06-2026/odmr_runs"
-AVG_FILE    = "/root/data/23-06-2026/odmr_average.csv"
+output_dir = r"root/data/BudgetODMR/23-06-2026"
+os.chdir(output_dir)
+RUNS_DIR    = "odmr_runs"
+AVG_FILE    = "odmr_average.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
