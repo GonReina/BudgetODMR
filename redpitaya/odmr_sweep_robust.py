@@ -43,8 +43,8 @@ N_SWEEPS           = 20      # full sweeps to average together
 AVERAGES_PER_POINT = 4       # ADC block captures averaged at each frequency
 SETTLE_S           = 0.005   # fixed dwell after programming, before capturing (>> lock time)
 
-RUNS_DIR    = "data/odmr_runs"
-AVG_FILE    = "data/odmr_average.csv"
+RUNS_DIR    = "/root/data/23-06-2026/odmr_runs"
+AVG_FILE    = "/root/data/23-06-2026/odmr_average.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
@@ -60,7 +60,7 @@ SPI_BUS = 2                     # Gen-2 RP = /dev/spidev2.0; Gen-1 = 1
 SPI_DEV = 0
 SPI_HZ  = 1_000_000
 LD_PIN  = rp.RP_DIO0_P
-MONITOR_LD = False              # False = ignore LD entirely (wire disconnected). The LD
+MONITOR_LD = True              # False = ignore LD entirely (wire disconnected). The LD
                                 # wire adds a ground path that disturbs lock; this sweep
                                 # uses a fixed settle, so it does NOT need LD. Recommended.
 
