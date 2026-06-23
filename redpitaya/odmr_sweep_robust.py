@@ -89,7 +89,7 @@ def build_registers(freq_mhz):
     r0 = (int_val << 15) | (frac_val << 3)
     r1 = (1 << 27) | (1 << 15) | (MOD_VAL << 3) | 0x1
     r2 = 0x18005E42 | ((1 << 8) if is_int else 0)              # LDF=1 on integer-N
-    r3 = 0x000004B3 | (((1 << 21) | (1 << 20)) if is_int else 0)
+    r3 = 0x000004B3 | (((1 << 22) | (1 << 21)) if is_int else 0)   # ABP=3ns + charge-cancel
     r4 = (1 << 23) | (sel << 20) | (250 << 12) | (1 << 5) | (pwr << 3) | 0x4
     r5 = 0x00580005
     return [r0, r1, r2, r3, r4, r5]
