@@ -29,7 +29,7 @@ import rp
 # CONFIGURATION  -- edit these, then run the script
 # ============================================================================
 DURATION_S      = 300.0          # total recording time (600 s = 10 minutes)
-OUTPUT_FILE     = "root/data/photodiode_laser_on.csv"   # everything under data/ gets synced to the PC
+OUTPUT_FILE     = "/root/data/BudgetODMR/25-06-2026/photodiode_laser_off.csv"   # everything under data/ gets synced to the PC
 
 SAMPLE_PERIOD_S = 0.4            # min spacing between logged points (0 = as fast as possible)
 PRINT_EVERY_S   = 10.0           # console progress interval
