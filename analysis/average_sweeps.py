@@ -34,14 +34,14 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026\data"
-RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs2")
+RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs4")
 RUNS_GLOB  = "run_*.csv"
-OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average.csv")
-SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average.png")   # None to skip saving
+OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average_4.csv")
+SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average_4.png")   # None to skip saving
 
-REQUIRE_LOCK        = False    # drop points with lock flag == 0 (needs MONITOR_LD=True sweeps)
+REQUIRE_LOCK        = True    # drop points with lock flag == 0 (needs MONITOR_LD=True sweeps)
 NORMALIZE_PER_SWEEP = True    # divide each sweep by its own median before averaging
-USE_MEDIAN          = True    # combine runs with median (robust to an occasional bad/noisy
+USE_MEDIAN          = False   # combine runs with median (robust to an occasional bad/noisy
                               # run or one-point glitch) instead of mean
 
 
