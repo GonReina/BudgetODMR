@@ -38,17 +38,17 @@ import rp
 # ============================================================================
 # CONFIG -- edit, then run
 # ============================================================================
-F_START_MHZ = 2800.0
-F_STOP_MHZ  = 2920.0
+F_START_MHZ = 2500.0
+F_STOP_MHZ  = 3500.0
 F_STEP_MHZ  = 1.0
 
-N_SWEEPS       = 5        # full sweeps to average together
-INTEGRATION_MS = 600.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
+N_SWEEPS       = 3        # full sweeps to average together
+INTEGRATION_MS = 100.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
 SETTLE_S       = 0.10     # dwell after (re)programming before integrating
 MW_ON_OFF      = True      # True = measure PL_on/PL_off per point (cancels laser drift)
-os.chdir(r"/root/data/BudgetODMR/23-06-2026")
-RUNS_DIR = "data/odmr_runs4"
-AVG_FILE = "data/odmr_average4.csv"
+os.chdir(r"/root/data/BudgetODMR/25-06-2026")
+RUNS_DIR = "data/odmr_runs_wide"
+AVG_FILE = "data/odmr_wide.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
@@ -232,6 +232,7 @@ def main():
                 for idx, freq in enumerate(freqs):
                     sig, ld = measure_point(adf, buff, freq)
                     f.write(f"{freq:.4f},{sig:.6f},{ld}\n")
+                    print("Running {}".format(freq))
                     running_sum[idx] += sig
             completed += 1
 
