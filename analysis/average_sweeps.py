@@ -33,11 +33,11 @@ import os
 import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
-DATA_DIR   = r"D:\data\BudgetODMR\23-06-2026\data"
-RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs4")
+DATA_DIR   = r"D:\data\BudgetODMR\25-06-2026\data"
+RUNS_DIR   = os.path.join(DATA_DIR, "odmr_runs_reverse")
 RUNS_GLOB  = "run_*.csv"
-OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average_4.csv")
-SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average_4.png")   # None to skip saving
+OUTPUT_CSV = os.path.join(DATA_DIR, "odmr_average_no_magnets.csv")
+SAVE_FIG   = os.path.join(DATA_DIR, "odmr_average_no_magnets.png")   # None to skip saving
 
 REQUIRE_LOCK        = True    # drop points with lock flag == 0 (needs MONITOR_LD=True sweeps)
 NORMALIZE_PER_SWEEP = True    # divide each sweep by its own median before averaging
