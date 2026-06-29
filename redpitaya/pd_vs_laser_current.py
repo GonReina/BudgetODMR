@@ -29,7 +29,7 @@ import rp
 # ============================================================================
 # CONFIG
 # ============================================================================
-OUTPUT_FILE = "data/laser_power_calibration.csv"
+OUTPUT_FILE = "root/data/BudgetODMR/29-06-2026/laser_power_calibration.csv"
 INTEGRATION_S = 1.0            # averaging time per point
 
 ADC_CHANNEL = rp.RP_CH_1       # IN1
