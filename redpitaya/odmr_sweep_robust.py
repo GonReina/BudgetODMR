@@ -38,17 +38,17 @@ import rp
 # ============================================================================
 # CONFIG -- edit, then run
 # ============================================================================
-F_START_MHZ = 2500.0
-F_STOP_MHZ  = 3500.0
-F_STEP_MHZ  = 1.0
+F_START_MHZ = 2840.0
+F_STOP_MHZ  = 2860.0
+F_STEP_MHZ  = 0.2
 
 N_SWEEPS       = 3        # full sweeps to average together
-INTEGRATION_MS = 100.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
+INTEGRATION_MS = 1.0     # photodiode integration per reading (100 ms rejects 50 & 60 Hz)
 SETTLE_S       = 0.10     # dwell after (re)programming before integrating
 MW_ON_OFF      = True      # True = measure PL_on/PL_off per point (cancels laser drift)
-os.chdir(r"/root/data/BudgetODMR/25-06-2026")
-RUNS_DIR = "data/odmr_runs_wide"
-AVG_FILE = "data/odmr_wide.csv"
+os.chdir(r"/root/data/BudgetODMR/26-06-2026")
+RUNS_DIR = "data/odmr_runs_prueba"
+AVG_FILE = "data/odmr_prueba.csv"
 
 REF_MHZ   = 25.0
 MOD_VAL   = 1000
