@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = r"D:\data\BudgetODMR\25-06-2026\data\odmr_runs_wide"# set to None to skip saving
+DATA_DIR   = r"D:\data\BudgetODMR\26-06-2026\data\odmr_runs_prueba"# set to None to skip saving
 
 
 def load_spectrum(path):
