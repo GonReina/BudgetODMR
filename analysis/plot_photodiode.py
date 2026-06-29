@@ -2,10 +2,11 @@
 Plot a photodiode time series recorded by redpitaya/record_photodiode.py.
 
 Reads the "t_s,pl_mean_v,pl_std_v" CSV (ignoring the '#' header lines) and
-shows two views: photoluminescence vs time (with a +/-1 sd band and mean
-line), and an FFT of that same trace, so periodic noise (drift, flicker,
-mains-related beats) shows up as a distinct peak instead of being buried in
-a broadband random-noise floor.
+shows photoluminescence vs time (with a +/-1 sd band and mean line) and an FFT
+of that same trace, so periodic noise (drift, flicker, mains-related beats)
+shows up as a distinct peak instead of being buried in a broadband random-noise
+floor. A second figure plots the noise as a percentage of signal (100*sd/mean)
+over time, i.e. how the fractional noise drifts during the run.
 
 Edit the CONFIGURATION block and run on your PC:  python3 plot_photodiode.py
 Requires matplotlib and numpy:  pip install matplotlib numpy
@@ -80,6 +81,28 @@ def main():
     if SAVE_FIG:
         fig.savefig(SAVE_FIG, dpi=150)
         print(f"Saved {SAVE_FIG}")
+
+    # ---- Second figure: noise as a PERCENTAGE of signal over time ----
+    # 100 * sd / mean per logged point. Shows how the relative (fractional) noise
+    # of the photodiode drifts during the run, independent of the absolute level.
+    std_pct = [100.0 * s / m if m else 0.0 for s, m in zip(std, mean)]
+    avg_pct = sum(std_pct) / len(std_pct)
+    fig2, axp = plt.subplots(figsize=(10, 4))
+    axp.plot(t, std_pct, "-", lw=1.0, color="tab:green", label="sd / PL (%)")
+    axp.axhline(avg_pct, color="tab:red", ls="--", lw=1, label=f"mean = {avg_pct:.3f} %")
+    axp.set_xlabel("Time (s)")
+    axp.set_ylabel("Noise (sd) as % of signal")
+    axp.set_title("Relative photodiode noise over time")
+    axp.legend()
+    axp.grid(True, alpha=0.3)
+    fig2.tight_layout()
+
+    if SAVE_FIG:
+        base, ext = os.path.splitext(SAVE_FIG)
+        save2 = base + "_stdpct" + ext
+        fig2.savefig(save2, dpi=150)
+        print(f"Saved {save2}")
+
     plt.show()
 
 
