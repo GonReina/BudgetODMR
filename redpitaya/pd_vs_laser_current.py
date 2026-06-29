@@ -51,9 +51,11 @@ def capture_block(buff):
 
 
 def measure(buff, seconds):
-    """Average IN1 over >= `seconds`. Return (mean_v, std_v, n_samples, integ_s)."""
+    """Average IN1 over >= `seconds`.
+    Return (mean_v, std_v, n_samples, integ_s, vmin, vmax)."""
     target = int(seconds * FS_HZ)
     total = total_sq = 0.0
+    vmin, vmax = 1e9, -1e9
     n = 0
     while n < target:
         capture_block(buff)
@@ -61,10 +63,14 @@ def measure(buff, seconds):
             v = buff[i]
             total += v
             total_sq += v * v
+            if v < vmin:
+                vmin = v
+            if v > vmax:
+                vmax = v
         n += N_BUF
     mean = total / n
     var = max(0.0, total_sq / n - mean * mean)
-    return mean, math.sqrt(var), n, n / FS_HZ
+    return mean, math.sqrt(var), n, n / FS_HZ, vmin, vmax
 
 
 def main():
@@ -96,11 +102,29 @@ def main():
                 continue
 
             print(f"  measuring {INTEGRATION_S:.1f} s ...", end="", flush=True)
-            mean, std, n, integ = measure(buff, INTEGRATION_S)
+            mean, std, n, integ, vmin, vmax = measure(buff, INTEGRATION_S)
             ts = datetime.now().isoformat(timespec="seconds")
             f.write(f"{ts},{current:.4f},{mean:.6f},{std:.6f},{n},{integ:.3f}\n")
             f.flush()
-            print(f" {current:.3f} mA -> {mean:.6f} V  (sd {std:.6f}, {n} samples)")
+
+            sem = std / (n ** 0.5)                       # uncertainty of the average
+            sd_pct = 100 * std / mean if mean else 0.0
+            sem_pct = 100 * sem / abs(mean) if mean else 0.0
+            print(f" {current:.3f} mA -> {mean:.6f} V")
+            print(f"     per-sample sd {std:.6f} V ({sd_pct:.2f}%);  "
+                  f"average uncertainty {sem:.6f} V ({sem_pct:.3f}%)")
+            print(f"     samples span {vmin:.4f} .. {vmax:.4f} V")
+            # ADC-range hint: full LV range is +/-1 V. If the signal spans only a
+            # tiny fraction of it you are wasting resolution -> use the LV (+/-1 V)
+            # jumper; if it hits ~+/-1 V (LV) it is clipping -> use HV (+/-20 V).
+            span = max(abs(vmin), abs(vmax))
+            if span < 0.1:
+                print("     NOTE: signal uses <10% of the +/-1 V LV range -- coarse "
+                      "quantization. Increase optical power or, if on the HV jumper, "
+                      "switch IN1 to LV.")
+            elif span > 0.95:
+                print("     NOTE: signal near +/-1 V -- if on LV it may be CLIPPING; "
+                      "switch IN1 to HV (+/-20 V) or reduce power.")
     except (KeyboardInterrupt, EOFError):
         print()
     finally:
