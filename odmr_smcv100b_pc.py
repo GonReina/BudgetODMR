@@ -35,23 +35,23 @@ from datetime import datetime
 # ============================================================================
 # CONFIG -- edit, then run
 # ============================================================================
-SMCV_IP = "192.168.2.50"      # <-- SMCV100B IP (its NIC/subnet on your PC)
-RP_IP   = "192.168.1.10"      # <-- Red Pitaya IP (its NIC/subnet on your PC)
+SMCV_IP = "169.254.2.20"      # <-- SMCV100B IP (its NIC/subnet on your PC)
+RP_IP   = "192.168.137.150"      # <-- Red Pitaya IP (its NIC/subnet on your PC)
 SMCV_PORT = 5025
 RP_PORT   = 5000
 
-F_START_MHZ = 2800.0
-F_STOP_MHZ  = 2940.0
+F_START_MHZ = 2700.0
+F_STOP_MHZ  = 3000.0
 F_STEP_MHZ  = 1.0
 
-POWER_DBM   = -10.0           # SMCV output level -- keep within the PE8301's safe input
+POWER_DBM   = 16.0           # SMCV output level -- keep within the PE8301's safe input
 N_SWEEPS       = 20
 INTEGRATION_MS = 100.0        # built from 100 ms mains-clean blocks
 SETTLE_S       = 0.02         # dwell after a freq change / output toggle
 MW_ON_OFF      = True         # measure PL_on/PL_off per point
 
-DATA_DIR = r"D:\data"
-RUNS_DIR = os.path.join(DATA_DIR, "odmr_runs")
+DATA_DIR = r"C:\Users\qute\Downloads\rsattempt\29-06-2026"
+RUNS_DIR = os.path.join(DATA_DIR, "odmr_runs_magnet")
 AVG_FILE = os.path.join(DATA_DIR, "odmr_average.csv")
 
 # Red Pitaya fast-ADC acquisition

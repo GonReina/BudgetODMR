@@ -25,7 +25,7 @@ import os
 import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
-DATA_DIR   = r"D:\data\BudgetODMR\29-06-2026"
+DATA_DIR   = r"C:\Users\qute\Downloads\rsattempt\29-06-2026"
 INPUT_FILE = os.path.join(DATA_DIR, "laser_power_calibration.csv")
 SAVE_FIG_PL  = os.path.join(DATA_DIR, "laser_calibration_pl.png")       # None to skip
 SAVE_FIG_PCT = os.path.join(DATA_DIR, "laser_calibration_stdpct.png")   # None to skip
