@@ -25,10 +25,28 @@ See TROUBLESHOOTING_GUIDE.md for the full hardware/software debugging roadmap.
   to wherever they're run (e.g. `/root/data/...`), so one Task Scheduler job
   on the PC can sync everything at once -- see "Backing up data" below.
 
+smcv/        Scripts that run ON YOUR PC and drive the R&S SMCV100B over LAN (SCPI)
+             while reading the RedPitaya's ADC via its SCPI server. Shared config.json.
+  config.json           All experiment settings (IPs, sweep range, power, lock-in params).
+  expconfig.py          Loads config.json (used by every smcv/ script + analysis/plot_magnet_scan.py).
+  check_instruments.py  Prove you can talk to the SMCV and the RedPitaya SCPI server. Run first.
+  odmr_smcv100b_pc.py   Stepped ODMR sweep (SMCV sets freq, RedPitaya reads IN1, MW on/off ratio).
+  odmr_magnet_scan.py   Prompt for a magnet position, run a sweep, repeat (Zeeman study).
+  odmr_lockin_am_pc.py        Lock-in AM  -> line appears as a PEAK.
+  odmr_lockin_fm_pc.py        Lock-in FM  (magnitude) -> |derivative|, NULL at centre.
+  odmr_lockin_fm_deriv_pc.py  Lock-in FM  (phase-sensitive) -> signed derivative, ZERO-CROSSING at centre.
+  lockin_common.py      Shared lock-in engine used by the three odmr_lockin_* scripts.
+             See "Lock-in ODMR methods" below.
+
+magnet_field_calc.py   (PC) Estimate on-axis magnet field & NV splitting vs distance.
+
 analysis/    Scripts that run ON YOUR PC after copying CSVs into data/ (needs matplotlib)
   plot_odmr.py          Plot one ODMR spectrum, mark the resonance dip.
-  plot_photodiode.py    Plot a photodiode time series with a +/-1 sd band.
-  average_sweeps.py     Average the repeated runs in data/odmr_runs/ and plot the result.
+  plot_photodiode.py    Plot a photodiode time series (+ noise-% figure).
+  plot_laser_calibration.py  PL & relative-noise vs laser current.
+  average_sweeps.py     Average repeated runs and plot the result (lock filter + normalize + median).
+  plot_magnet_scan.py   Waterfall + dip separation + estimated field vs magnet position.
+  plot_lockin.py        Analyse lock-in runs (AM peak / FM null / FM-derivative zero-crossing) -> centre(s), splitting, B.
 
 arduino/     Legacy Arduino control path (before the move to RedPitaya)
   adf4351_bridge.ino + odmr_sweep.py   PC owns the PLL math, Arduino latches registers.
@@ -37,6 +55,43 @@ arduino/     Legacy Arduino control path (before the move to RedPitaya)
 docs/        ADF4351.pdf datasheet
 data/        CSV/PNG outputs (analysis scripts read from here)
 ```
+
+## Lock-in ODMR methods (SMCV100B)
+
+The stepped DC sweep (`smcv/odmr_smcv100b_pc.py`) dwells and averages at each
+frequency -- it works but is slow at fine resolution and limited by laser 1/f and
+mains noise. The lock-in scripts instead modulate the microwaves at `f_mod` (a few
+kHz, set in `config.json`) and detect the photodiode's response at that frequency,
+where the noise floor is far lower -- so each point takes ~8 ms instead of ~100 ms
+and the resonance stands out cleanly. The SMCV modulates itself with its internal
+LF generator (K197 option); for AM and FM nothing extra is wired (photodiode ->
+IN1 only). The Red Pitaya demodulates against the known `f_mod`. Test in this order:
+
+1. **AM** -- `smcv/odmr_lockin_am_pc.py`
+   The microwave AMPLITUDE is switched sinusoidally at `f_mod`. On resonance the PL
+   is modulated at `f_mod`; off resonance it is not. The magnitude lock-in
+   `R = sqrt(X^2 + Y^2)` therefore traces the ODMR line as a **peak**. Simplest and
+   most robust -- start here to confirm the whole chain end to end.
+
+2. **FM, magnitude** -- `smcv/odmr_lockin_fm_pc.py`
+   The microwave FREQUENCY is dithered by ~a linewidth at `f_mod`. The PL is then
+   modulated in proportion to the SLOPE of the line, so the magnitude lock-in gives
+   the **|derivative|**: two lobes with a null exactly at the line centre. A sharper
+   centre feature than AM, still phase-independent (no reference cable).
+
+3. **FM, phase-sensitive (derivative)** -- `smcv/odmr_lockin_fm_deriv_pc.py`
+   Same FM dither, but demodulated IN PHASE with the modulation reference. This
+   yields the **signed derivative** -- a dispersive curve that crosses zero at the
+   centre, the most precise centre estimate (best for tracking small Zeeman
+   shifts). It needs a real phase reference: route the SMCV LF-generator output to
+   Red Pitaya **IN2** (set the IN2 jumper to HV). If your SMCV cannot output its LF
+   generator, use the FM-magnitude script instead -- its null still locates centre.
+
+All three save `freq_MHz,signal` CSVs (+ a running average) under `data_dir`. Analyse
+them with `analysis/plot_lockin.py`: set `MODE` to `am`, `fm`, or `fm_deriv` and it
+picks the right centre-finder for that lineshape (AM = peak, FM = null between lobes,
+FM-derivative = zero-crossing via integration), then reports the resonance centre(s),
+and for a Zeeman pair the splitting and implied axial field B = df / (2*gamma).
 
 ## Typical workflow
 

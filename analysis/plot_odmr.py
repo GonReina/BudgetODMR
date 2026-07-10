@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 # ===== CONFIGURATION =====
 # Files live in the repo's data/ folder regardless of where you run this from.
-DATA_DIR   = r"C:\Users\qute\Downloads\rsattempt\29-06-2026\odmr_runs_magnet"# set to None to skip saving
+DATA_DIR   = r"C:\Users\qute\Downloads\rsattempt\03-07-2026\magnet_50cm_sweep"# set to None to skip saving
 
 
 def load_spectrum(path):
@@ -47,9 +47,10 @@ def main():
 
     ax.set_xlabel("Microwave frequency (MHz)")
     ax.set_ylabel("Photoluminescence (V)")
-    ax.set_title("NV centre ODMR spectrum")
+    ax.set_title("With magnets spectrum")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    # ax.set_xlim([2840, 2900])
     fig.tight_layout()
 
     if SAVE_FIG:
@@ -59,11 +60,13 @@ def main():
 
 
 if __name__ == "__main__":
-    for i in range(1, 6):
-        INPUT_FILE = os.path.join(DATA_DIR, f"run_0{i}.csv")
-        SAVE_FIG   = os.path.join(DATA_DIR, f"run_0{i}.png")   
-        if i > 9:
-            INPUT_FILE = os.path.join(DATA_DIR, f"run_{i}.csv")
-            SAVE_FIG   = os.path.join(DATA_DIR, f"run_{i}.png")
-        main()
+    # for i in range(1, 6):
+    # INPUT_FILE = os.path.join(DATA_DIR, f"run_0{i}.csv")
+    # SAVE_FIG   = os.path.join(DATA_DIR, f"run_0{i}.png") 
+    INPUT_FILE = r"C:\Users\qute\Downloads\rsattempt\07-07-2026\odmr_runs_with_magnet\run_01.csv"
+    SAVE_FIG = r"C:\Users\qute\Downloads\rsattempt\07-07-2026\odmr_runs_with_magnet\run_01.png"
+    # if i > 9:
+    #     INPUT_FILE = os.path.join(DATA_DIR, f"run_{i}.csv")
+    #     SAVE_FIG   = os.path.join(DATA_DIR, f"run_{i}.png")
+    main()
 

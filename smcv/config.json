@@ -1,0 +1,50 @@
+{
+  "instruments": {
+    "smcv_ip": "169.254.2.20",
+    "smcv_port": 5025,
+    "rp_ip": "192.168.137.153",
+    "rp_port": 5000
+  },
+  "sweep": {
+    "f_start_mhz": 2850.0,
+    "f_stop_mhz": 2900.0,
+    "f_step_mhz": 0.1,
+    "power_dbm": 16.0,
+    "n_sweeps": 5,
+    "integration_ms": 100.0,
+    "settle_s": 0.02,
+    "mw_on_off": true
+  },
+  "redpitaya": {
+    "decimation": 1024,
+    "n_buf": 16384,
+    "input_gain": "LV",
+    "subread_ms": 100.0
+  },
+  "paths": {
+    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\10-07-2026",
+    "runs_subdir": "odmr_runs_with_magnet",
+    "avg_file": "odmr_average.csv"
+  },
+  "magnet": {
+    "n_sweeps_per_pos": 4,
+    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\10-07-2026\\magnet_fm_sweep",
+    "position_units": "cm"
+  },
+  "analysis": {
+    "gamma_mhz_per_mt": 28.024,
+    "d_center_mhz": 2870.0,
+    "smooth_pts": 3,
+    "min_sep_mhz": 3.0,
+    "depth_frac": 0.25
+  },
+  "lockin": {
+    "f_mod_hz": 5000.0,
+    "mod_out_volt": 0.9,
+    "decimation": 64,
+    "settle_s": 0.01,
+    "am_depth_pct": 90.0,
+    "fm_deviation_khz": 2000.0,
+    "runs_subdir": "odmr_lockin_runs"
+  }
+}

@@ -10,9 +10,11 @@ end-to-end test (more than a ping, which only proves the network layer).
 
 import socket
 
-# Set these to match odmr_smcv100b_pc.py
-SMCV_IP, SMCV_PORT = "169.254.2.20", 5025
-RP_IP,   RP_PORT   = "192.168.137.150", 5000
+from expconfig import load_config
+
+_i = load_config()["instruments"]
+SMCV_IP, SMCV_PORT = _i["smcv_ip"], _i["smcv_port"]
+RP_IP,   RP_PORT   = _i["rp_ip"],   _i["rp_port"]
 
 
 def scpi_query(ip, port, cmd, term, timeout=5.0):

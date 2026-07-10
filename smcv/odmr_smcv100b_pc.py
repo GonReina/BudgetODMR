@@ -32,37 +32,38 @@ import socket
 import time
 from datetime import datetime
 
+from redpitaya_scope import RedPitayaScope
+
 # ============================================================================
-# CONFIG -- edit, then run
+# CONFIG -- all settings live in config.json (edit that, not this file)
 # ============================================================================
-SMCV_IP = "169.254.2.20"      # <-- SMCV100B IP (its NIC/subnet on your PC)
-RP_IP   = "192.168.137.150"      # <-- Red Pitaya IP (its NIC/subnet on your PC)
-SMCV_PORT = 5025
-RP_PORT   = 5000
+from expconfig import load_config
 
-F_START_MHZ = 2700.0
-F_STOP_MHZ  = 3000.0
-F_STEP_MHZ  = 1.0
+_cfg = load_config()
+_i, _s, _r, _p = _cfg["instruments"], _cfg["sweep"], _cfg["redpitaya"], _cfg["paths"]
 
-POWER_DBM   = 16.0           # SMCV output level -- keep within the PE8301's safe input
-N_SWEEPS       = 20
-INTEGRATION_MS = 100.0        # built from 100 ms mains-clean blocks
-SETTLE_S       = 0.02         # dwell after a freq change / output toggle
-MW_ON_OFF      = True         # measure PL_on/PL_off per point
+SMCV_IP, SMCV_PORT = _i["smcv_ip"], _i["smcv_port"]
+RP_IP,   RP_PORT   = _i["rp_ip"],   _i["rp_port"]
 
-DATA_DIR = r"C:\Users\qute\Downloads\rsattempt\29-06-2026"
-RUNS_DIR = os.path.join(DATA_DIR, "odmr_runs_magnet")
-AVG_FILE = os.path.join(DATA_DIR, "odmr_average.csv")
+F_START_MHZ, F_STOP_MHZ, F_STEP_MHZ = _s["f_start_mhz"], _s["f_stop_mhz"], _s["f_step_mhz"]
+POWER_DBM      = _s["power_dbm"]
+N_SWEEPS       = _s["n_sweeps"]
+INTEGRATION_MS = _s["integration_ms"]
+SETTLE_S       = _s["settle_s"]
+MW_ON_OFF      = _s["mw_on_off"]
+
+DATA_DIR = _p["data_dir"]
+RUNS_DIR = os.path.join(DATA_DIR, _p["runs_subdir"])
+AVG_FILE = os.path.join(DATA_DIR, _p["avg_file"])
 
 # Red Pitaya fast-ADC acquisition
-RP_DECIMATION = 1024          # fs = 122.07 kS/s; one 16384-sample block = 134 ms
-FS_HZ = 125e6 / RP_DECIMATION
-N_BUF = 16384
-RP_INPUT_GAIN = "LV"          # match the physical IN1 jumper: "LV" (+/-1V) or "HV" (+/-20V)
-
-SUBREAD_MS = 100.0
-N_SUBREAD  = min(N_BUF, int(round(SUBREAD_MS / 1000.0 * FS_HZ)))   # ~12207 samples
-N_SUB      = max(1, int(round(INTEGRATION_MS / SUBREAD_MS)))
+RP_DECIMATION = _r["decimation"]
+N_BUF         = _r["n_buf"]
+RP_INPUT_GAIN = _r["input_gain"]
+SUBREAD_MS    = _r["subread_ms"]
+FS_HZ         = _r["fs_hz"]         # derived in expconfig
+N_SUBREAD     = _r["n_subread"]     # derived
+N_SUB         = _s["n_sub"]         # derived
 
 
 # ============================================================================
@@ -129,29 +130,15 @@ class SMCV100B:
 # ============================================================================
 class RedPitayaADC:
     def __init__(self, ip, port):
-        self.s = Scpi(ip, port, term="\r\n")
-        # quick reachability check (raises if the SCPI server isn't running)
-        self.s.write("ACQ:RST")
-        self.s.query("ACQ:DEC?")
+        self.scope = RedPitayaScope(ip, port)
         print(f"Red Pitaya SCPI server reachable at {ip}:{port}")
 
     def acquire(self):
-        """Capture one buffer and return it as a list of float volts."""
-        self.s.write("ACQ:RST")
-        self.s.write(f"ACQ:DEC {RP_DECIMATION}")
-        try:
-            self.s.write(f"ACQ:SOUR1:GAIN {RP_INPUT_GAIN}")   # tell SW the jumper setting
-        except Exception:
-            pass
-        self.s.write("ACQ:START")
-        self.s.write("ACQ:TRIG NOW")
-        time.sleep(N_BUF / FS_HZ + 0.03)        # wait for the buffer to fill (~134 ms)
-        raw = self.s.query("ACQ:SOUR1:DATA?")
-        raw = raw.strip().strip("{}")
-        return [float(x) for x in raw.split(",") if x.strip()]
+        """Capture one fill-synchronised buffer (no stale/zero samples) -> np.array."""
+        return self.scope.acquire((1,), RP_DECIMATION, RP_INPUT_GAIN)
 
     def close(self):
-        self.s.close()
+        self.scope.close()
 
 
 # ============================================================================
