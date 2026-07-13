@@ -7,11 +7,7 @@ FM lock-in with virtual demodulation at a fixed 5 kHz, no phase reference).*
 
 ## The idea in one paragraph
 
-Our frequency-locked NV magnetometer is, viewed as a dynamical system, one gain
-knob away from an **autonomous device**. Each lock cycle applies the discrete map
-`f_{k+1} = f_k − (G/D_cal)·[R(f_k) − R_0]`, whose linearisation has multiplier
-`1 − G_eff` with the dimensionless gain `G_eff = G·D_true/D_cal` proportional to
-the local slope of the ODMR lock-in lobe. For `G_eff < 2` the loop is an ordinary
+Our frequency-locked NV magnetometer is, viewed as a dynamical system, whose oscillatory behaviour is determined by its gain. Each lock cycle applies the discrete map `f_{k+1} = f_k − (G/D_cal)·[R(f_k) − R_0]`, whose linearisation has multiplier `1 − G_eff` with the dimensionless gain `G_eff = G·D_true/D_cal` proportional to the local slope of the ODMR lock-in lobe. For `G_eff < 2` the loop is an ordinary
 tracker; at `G_eff = 2` it undergoes a **flip (period-doubling) bifurcation** and
 becomes a **self-oscillator** — a limit cycle generated entirely by the device,
 with no external clock or drive, cascading to chaos at higher gain (fig. 2). The
