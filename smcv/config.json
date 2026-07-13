@@ -22,7 +22,7 @@
     "subread_ms": 100.0
   },
   "paths": {
-    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\10-07-2026",
+    "data_dir": "C:\\Users\\Gonzalo\\Downloads\\BudgetODMR\\selfosc_data",
     "runs_subdir": "odmr_runs_with_magnet",
     "avg_file": "odmr_average.csv"
   },
