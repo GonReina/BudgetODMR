@@ -1,0 +1,20 @@
+Self-oscillation summary (2026-07-10T14:34:53)
+  working point   : 2867.900 MHz, R0 = 0.102 mV, D = +0.103 mV/MHz
+  cycle time      : 404 ms (2.5 cycles/s)
+  gain scan (G: spread / period-2 amplitude):
+    G =  0.6:   126.2 kHz /    13.9 kHz
+    G =  1.0:   374.7 kHz /    18.9 kHz
+    G =  1.4:   338.5 kHz /    11.7 kHz
+    G =  1.8:   497.6 kHz /    47.9 kHz
+    G =  2.0:   622.7 kHz /    69.7 kHz
+    G =  2.1:   646.9 kHz /    58.3 kHz
+    G =  2.2:   713.0 kHz /    96.6 kHz
+    G =  2.4:   714.0 kHz /    30.6 kHz
+    G =  2.7:  1068.2 kHz /    84.5 kHz
+    G =  3.0:  1337.7 kHz /    85.4 kHz
+    G =  3.4:  1456.8 kHz /    57.7 kHz
+  critical gain   : G_c ~ 2.0   (theory: 2 x D_cal/D_true; repeat with a perturbation
+                    applied and compare G_c -- that shift is the sensor signal.
+                    The smooth growth of the spread BELOW G_c is the critical-
+                    fluctuation precursor -- also perturbation-dependent.)
+  stats run       : G = 2.3, 4000 cycles, period-2 amp 68.7 kHz
