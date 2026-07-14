@@ -28,7 +28,7 @@
   },
   "magnet": {
     "n_sweeps_per_pos": 4,
-    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\10-07-2026\\magnet_fm_sweep",
+    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\08-07-2026\\magnet_fm_sweep",
     "position_units": "cm"
   },
   "analysis": {
