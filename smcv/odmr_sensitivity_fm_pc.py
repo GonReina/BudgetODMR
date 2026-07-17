@@ -343,6 +343,14 @@ def main():
               f"{N_TIMESERIES} readings")
         src.set_freq_mhz(f_star)
         time.sleep(PARK_SETTLE_S)
+
+        # a few RAW buffers at f*, so the analysis can show the demodulation
+        # in action (raw photodiode trace + sliding-window tone amplitude)
+        raw = np.array([rp.acquire_in1() for _ in range(3)])
+        raw_path = os.path.join(DATA_DIR, "sensitivity_fm_rawbuf.npz")
+        np.savez(raw_path, fs=FS_HZ, f_mod=F_MOD, f_star=f_star, v=raw)
+        print(f"  saved {raw.shape[0]} raw buffers -> {raw_path}")
+
         t, r = record_timeseries(rp, N_TIMESERIES, "on-slope")
 
         print(f"  detection floor: MW output OFF, {N_FLOOR} readings")

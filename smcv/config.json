@@ -2,7 +2,7 @@
   "instruments": {
     "smcv_ip": "169.254.2.20",
     "smcv_port": 5025,
-    "rp_ip": "192.168.137.153",
+    "rp_ip": "192.168.137.227",
     "rp_port": 5000
   },
   "sweep": {
@@ -22,13 +22,13 @@
     "subread_ms": 100.0
   },
   "paths": {
-    "data_dir": "C:\\Users\\Gonzalo\\Downloads\\BudgetODMR\\selfosc_data",
+    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\16-07-2026",
     "runs_subdir": "odmr_runs_with_magnet",
     "avg_file": "odmr_average.csv"
   },
   "magnet": {
     "n_sweeps_per_pos": 4,
-    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\08-07-2026\\magnet_fm_sweep",
+    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\16-07-2026\\magnet_fm_sweep",
     "position_units": "cm"
   },
   "analysis": {

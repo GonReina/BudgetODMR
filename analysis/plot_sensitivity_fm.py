@@ -34,6 +34,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "smcv"))
 from expconfig import load_config
 from odmr_sensitivity_fm_pc import (analyse, moving_average, welch_asd,
+                                    demodulate, F_MOD,
                                     SMOOTH_PTS, FIT_HALF_PTS)
 
 _cfg = load_config()
@@ -147,23 +148,44 @@ def main():
     ax.legend(fontsize=8)
     ax.grid(True, which="both", alpha=0.3)
 
-    # (d) Allan deviation
+    # (d) demodulation in action: one raw buffer + sliding-window tone amplitude
     ax = axes[1, 1]
-    taus, adev = res["taus_s"], res["adev_nT"]
-    ax.loglog(taus, adev, "o-", color="tab:blue", label="Allan deviation")
-    ax.loglog(taus, adev[0] * np.sqrt(taus[0] / taus), "--", color="0.5",
-              label=r"white noise ($\propto 1/\sqrt{\tau}$)")
-    if floor_nT is not None:
-        ax.axhline(floor_nT, color="tab:gray", ls=":",
-                   label=f"MW-off floor ({floor_nT:.1f} nT)")
-    ax.plot(res["tau_best_s"], res["adev_best_nT"], "*", ms=14, color="tab:red",
-            label=f"best: {res['adev_best_nT']:.1f} nT @ {res['tau_best_s']:.1f} s")
-    ax.set_xlabel("averaging time tau (s)")
-    ax.set_ylabel("Allan deviation (nT)")
-    ax.set_title(f"(d) Sensitivity: {res['eta_int_nT_rtHz']:.1f} nT/$\\sqrt{{Hz}}$ "
-                 f"intrinsic / {res['eta_wall_nT_rtHz']:.1f} wall-clock")
-    ax.legend(fontsize=8)
-    ax.grid(True, which="both", alpha=0.3)
+    raw_path = os.path.join(DATA_DIR, "sensitivity_fm_rawbuf.npz")
+    if not os.path.exists(raw_path):
+        ax.text(0.5, 0.5, "no sensitivity_fm_rawbuf.npz --\n"
+                "re-run odmr_sensitivity_fm_pc.py\n(newer version saves raw buffers)",
+                ha="center", va="center", transform=ax.transAxes, fontsize=9)
+        ax.set_title("(d) Raw signal during one measurement interval")
+    else:
+        d_ = np.load(raw_path)
+        fs_raw, v = float(d_["fs"]), d_["v"][0]
+        fmod_ = float(d_["f_mod"]) if "f_mod" in d_ else F_MOD
+        tt_raw = np.arange(len(v)) / fs_raw
+        ax.plot(1e3 * tt_raw, 1e3 * (v - np.mean(v)), lw=0.3, color="0.7",
+                label="raw photodiode (mean removed)")
+        block = max(64, int(round(1e-3 * fs_raw)))       # 1 ms demod window
+        hop = max(1, block // 4)
+        tt_d, RR = [], []
+        for s0 in range(0, len(v) - block + 1, hop):
+            tt_d.append((s0 + block / 2) / fs_raw)
+            RR.append(demodulate(v[s0:s0 + block], fs_raw, fmod_))
+        ax2 = ax.twinx()
+        ax2.plot(1e3 * np.array(tt_d), 1e3 * np.array(RR), color="tab:green",
+                 lw=1.6, label="demodulated R(t), 1 ms window")
+        ax2.axhline(1e3 * float(np.mean(RR)), color="tab:green", ls=":", lw=1)
+        ax2.set_ylabel("demodulated R (mV)", color="tab:green")
+        ax2.tick_params(axis="y", labelcolor="tab:green")
+        ax2.set_ylim(bottom=0)
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = ax2.get_legend_handles_labels()
+        ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="lower right")
+        ax.set_title("(d) One measurement interval: raw signal + demodulation")
+    ax.set_xlabel("time in buffer (ms)")
+    ax.set_ylabel("photodiode - mean (mV)")
+    ax.grid(True, alpha=0.3)
+    print(f"Allan minimum {res['adev_best_nT']:.1f} nT at "
+          f"tau = {res['tau_best_s']:.2f} s "
+          f"(Allan plot removed from the figure; values remain in the summary)")
 
     fig.suptitle("FM lock-in ODMR sensitivity", y=0.995)
     fig.tight_layout()
