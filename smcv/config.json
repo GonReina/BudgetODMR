@@ -1,8 +1,8 @@
 {
   "instruments": {
-    "smcv_ip": "169.254.2.20",
+    "smcv_ip": "192.168.50.20",
     "smcv_port": 5025,
-    "rp_ip": "192.168.137.227",
+    "rp_ip": "169.254.129.123",
     "rp_port": 5000
   },
   "sweep": {
@@ -22,7 +22,7 @@
     "subread_ms": 100.0
   },
   "paths": {
-    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\16-07-2026",
+    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\23-07-2026",
     "runs_subdir": "odmr_runs_with_magnet",
     "avg_file": "odmr_average.csv"
   },
