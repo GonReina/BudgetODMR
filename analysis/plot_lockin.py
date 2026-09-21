@@ -36,7 +36,7 @@ from expconfig import load_config
 
 # ===== CONFIGURATION =====
 MODE = "fm"                 # "am" | "fm" | "fm_deriv"
-N_RESONANCES = 4            # how many resonance centres to look for (2 = Zeeman pair)
+N_RESONANCES = 2            # how many resonance centres to look for (2 = Zeeman pair)
 PLOT_RUNS = True            # also save a plot of each individual run_XX.csv
 
 _cfg = load_config()
