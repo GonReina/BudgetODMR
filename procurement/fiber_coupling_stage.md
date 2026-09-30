@@ -1,6 +1,63 @@
 # Free-space → fibre coupling stage — parts list
 
 All prices **ex-VAT**, read from thorlabs.com on 15 Sep 2026 (EUR, Bergkirchen DE warehouse).
+Reviewed 30 Sep 2026 against the optical model in `notebooks/Optical_Setup.ipynb` (§2):
+corrected beam path below, beam-size numbers recomputed for this fibre's 4.0 µm mode.
+
+## Reviewed beam path — what goes where, and why
+
+```
+LAUNCH END (beam walk, alignment-critical)
+DJ532-40 ─► M1 (KS1+BB1-E02P) ─► M2 (KS1+BB1-E02P) ─► [iris A] ─► λ/2 (RSP1/M) ─► [iris B] ─► F240APC-532 ─► fibre
+ ~1.4 mm    150–300 mm apart      iris A just after M2, iris B just before the coupler, as far apart as possible
+
+DELIVERY END (collimated, nothing here is alignment-critical)
+fibre ─► F810APC-543 (confocal)  ─► LPVISE100-A ─► NE10A / NE20A ─► FBW5532-10 ─► DMLP550R ─► objective
+      or F240APC-532 (ensemble)     fixed, on the    tilted 2–5°      fixed mount
+                                    slow axis
+```
+
+Compared with the proposed order
+`DJ532-40 → FBW5532-10 → polariser → iris → M1 → M2 → iris → collimator → fibre → collimator → ND → λ/2 → DMLP550R`,
+five things move:
+
+1. **λ/2 plate: launch side, after M2, before the coupler, not before the DMLP550R.** Its job
+   is to rotate the laser's linear polarisation onto the fibre's slow axis. That is what
+   makes the PM fibre polarisation-maintaining. It goes *after* the mirrors because it can
+   rotate linear polarisation but cannot undo the ellipticity that 45° dielectric mirrors
+   add. Keep the laser polarisation s or p on M1/M2 (the plate fixes the orientation
+   afterwards). At the delivery end, a λ/2 in front of the DMLP550R would rotate the
+   polarisation *at the dichroic*. 532 nm sits on its 533 nm reflection-band edge, where
+   reflectance is polarisation-dependent, so it would change the excitation power and
+   NV-orientation selectivity together. If you later want polarisation control at the
+   sample, put a **second** λ/2 between the DMLP550R and the objective.
+2. **Linear polariser: after the output collimator, fixed on the slow axis, not at the
+   launch.** At the launch it is redundant if the DPSS output is already well polarised
+   (check once: rotate it in front of the power meter). As a *rotating* attenuator it would
+   also misalign the input polarisation from the PM axis. After the fibre, fixed, it acts as
+   a clean-up polariser. The residual polarisation wander (≤ −15 dB extinction ratio) then
+   becomes a ≤ 3 % power change instead of a polarisation change at the dichroic. **Do not
+   rotate it for power control.** At 45° to the slow axis the fibre's thermal birefringence
+   drift becomes ±17 % power wander (notebook §2). Step the power with the ND filters.
+3. **FBW5532-10: after the fibre, not before.** Silica fibre generates weak Raman and
+   fluorescence background above 540 nm. Part of it reaches the detector: it is reflected by
+   the DMLP550R, bounces off the diamond (~17 %), and passes the FELH0550. The line filter
+   has to sit after the fibre to remove it (and any residual pump IR with it). It is wedged
+   (~30′ → 4 mrad deviation → **~20 µm focus shift** with the N40X-PF), so give it a fixed
+   mount and align after it. Ø12.5 mm clips only ~0.3 % of a 5.9 mm beam.
+4. **Irises: both after the mirrors.** An iris before M1 sees a beam whose position is fixed
+   by the laser, so it adds nothing to the walk. It is still useful as a safety aperture.
+   Beam walking needs two reference points *downstream* of M2 (steps 1–4 of the procedure
+   below).
+5. **ND filters: after the collimator (as proposed).** In the collimated beam a flat plate
+   adds no aberration. A 3° tilt shifts the beam by ~36 µm, which is harmless. Tilting keeps
+   their reflections out of the fibre. Between fibre and lens the same 2 mm plate would move
+   the focus by 0.7 mm and ruin the collimation.
+
+The output collimator **is** an asphere acting as a collimator (a point source, the 4 µm
+mode, at its focus). Use a fixed-focus APC package rather than an ACL condenser: the
+package sets the fibre–lens spacing at the factory, compensates the 8° APC facet, and is
+AR-coated at 532 nm.
 
 ## The fibre has two ends, and they want different collimators
 
@@ -8,16 +65,22 @@ This is the thing to hold onto, because the two requirements pull in opposite di
 
 | End | Job | Beam diameter needed | Set by |
 |---|---|---|---|
-| **Launch** (laser → fibre) | focus the laser onto the fibre core | match the **laser's** beam, ≈ 1.5 mm | `F240APC-532` |
-| **Delivery** (fibre → microscope) | collimate for the objective pupil | fill the **7.5 mm** back aperture | `F810APC-543` |
+| **Launch** (laser → fibre) | focus the laser onto the fibre core | match the **laser's** beam, ≈ 1.3–1.5 mm | `F240APC-532` |
+| **Delivery, confocal** (fibre → microscope) | collimate for the objective pupil | fill the **7.5 mm** back aperture | `F810APC-543` |
+| **Delivery, ensemble** | reproduce today's beam | ≈ 1.3 mm (effective NA 0.13, ~2.5 µm spot, no saturation) | a second `F240APC-532` |
+
+The two delivery options are different experiments, not better and worse. For ensemble
+ODMR a pupil-filling beam makes a ~0.4 µm spot that saturates the NVs at mW powers.
+Mount the delivery collimator in an SM1 adapter so that swapping them is a two-minute job.
 
 > **APC, not PC** — see the connector section below. Both collimators you own are the
 > FC/**PC** variant and your fibre is FC/**APC**. This is probably not a detail.
 
-Both produce the same ~3.6 µm spot at the fibre tip — they have to, it is the same fibre
-mode — so either *could* sit at either end. What differs is the free-space beam diameter
-on the other side of the lens, and that is chosen by what it has to talk to: a 1.5 mm
-laser beam at one end, a 7.5 mm objective pupil at the other.
+Both focus to the same spot at the fibre tip. They have to, since it is the same fibre
+mode (MFD ≈ 4.0 µm at 532 nm for this fibre), so either *could* sit at either end. What
+differs is the free-space beam diameter on the other side of the lens, D = 4λf/(π·MFD).
+That diameter is chosen by what the lens has to talk to: a ~1.4 mm laser beam at one end,
+a 7.5 mm objective pupil at the other.
 
 ---
 
@@ -64,7 +127,7 @@ alternative but needs a Ø1.5" mount.
 
 ## Design decision: you do NOT need a focusing lens
 
-The `F240FC-532` you already own **is** the coupling lens. Run in reverse it takes a
+The F240 collimator (as the APC version, see above) **is** the coupling lens. Run in reverse it takes a
 collimated beam and focuses it onto the fibre tip; the lens-to-tip spacing is fixed at the
 factory, which is exactly why it works. Adding a separate focusing lens would give you a
 second, conflicting focus condition and make the alignment harder, not easier.
@@ -86,14 +149,19 @@ The one thing mirrors **cannot** fix is beam diameter — see the gate below.
 ## Gate before ordering: measure your beam diameter (LAUNCH end only)
 
 `F240FC-532` specs (verified): waist diameter **1.48 mm**, waist distance 6.96 mm,
-NA = 0.51, f = 7.86 mm, housing Ø12 mm / M12 × 0.5.
+NA = 0.51, f = 7.86 mm, housing Ø12 mm / M12 × 0.5. Thorlabs quote the 1.48 mm with their
+reference fibre. With *this* fibre's 4.0 µm mode the matched beam is **1.33 mm**.
 
-Your collimated laser beam at the coupler should be **≈ 1.5 mm (1/e²)**. Mismatch costs
-coupling efficiency as η = [2w₁w₂/(w₁²+w₂²)]² — a 2× mismatch already throws away ~36 %.
+Mismatch costs coupling efficiency as η = [2w₁w₂/(w₁²+w₂²)]². A 2× mismatch already throws
+away ~36 %, but ±30 % costs only ≤ 9 %. The gate is forgiving.
 
-Measure it with the VRC2 card and the ID25 iris (close down until ~85 % of power is
-clipped). If it comes out far from 1.5 mm, **do not build a telescope** — just swap the
-launch collimator, all three are the same €176.05:
+**Status (30 Sep 2026): provisionally passed.** A viewing-card estimate gives the laser
+beam as "just below 1.5 mm". Taking 1.4 mm, the ideal mode match to the F240 is 99.7 %,
+so no collimator swap is needed. Real coupling will be limited by M², astigmatism and
+alignment (expect 50–80 %), not by diameter. Confirm it properly with the ID25 iris: the
+iris diameter at which **86.5 % of the power is transmitted** is the 1/e² diameter. Only
+if it comes out far from 1.3–1.5 mm, **do not build a telescope**: swap the launch
+collimator instead (FC prices shown; the APC equivalents are needed for this fibre):
 
 | Part | Waist diameter | Use if your beam is |
 |---|---|---|
@@ -123,9 +191,10 @@ connector already suppresses back-reflection into the diode. **Nothing here need
 replacing.** (This also retracts a warning I gave earlier about FC/PC Fresnel
 back-reflection into the DJ532-40 — that concern does not apply; your fibre is APC.)
 
-PM is worth keeping rather than downgrading to plain single-mode: your `DMLP550R` sits at
-45° and is polarisation-sensitive, so a drifting output polarisation would convert
-directly into excitation-power drift in the ODMR baseline.
+PM is worth keeping rather than downgrading to plain single-mode. Your `DMLP550R` sits at
+45° and is polarisation-sensitive: 532 nm is right at the edge of its 380–533 nm
+reflection band. A drifting output polarisation would therefore convert directly into
+excitation-power drift in the ODMR baseline.
 
 ### Optional fibre swap — better, and it refunds you €37
 
@@ -150,9 +219,12 @@ spot-size difference is ~18 %. Do it if returns are easy; do not hold up the bui
 ## Why the delivery end matters at all
 
 Your `N40X-PF` has NA = 0.75 and f = 5 mm, so its back aperture is 2·NA·f = **7.5 mm**.
-An `F240` delivers 1.48 mm there — an 18 % pupil fill, which drops the *effective
-excitation* NA to ~0.14 and inflates the focal volume by roughly 900×. That is why you
-have no optical sectioning. The F810 fixes it; the fibre choice then tunes 78 % → 92 %.
+An `F240` delivers 1.33 mm there (as does today's free-space beam): an 18 % pupil fill,
+which drops the *effective excitation* NA to ~0.13. The spot is then ~2.5 µm (1/e²)
+instead of ~0.4 µm FWHM, with a ~20 µm Rayleigh range in the diamond. In a confocal
+arrangement (30 µm pinhole) the F810 shrinks the effective detection volume ~7×, from
+~31 to ~5 µm³ (notebook §4). The fibre choice then tunes the fill from 78 % to 92 %. For
+**ensemble** work the under-filled F240 beam is the better choice (see the table at the top).
 
 **On the 11 nm wavelength offset (543 design, 532 use):** the AR coating is 350–700 nm and
 Thorlabs quote the damage threshold "measured at 532 nm", so transmission is a non-issue.
@@ -199,7 +271,7 @@ collimation by eye over a 2 m path is the single most common reason a coupling a
 stalls at a few percent and nobody can say why. (The `SI050P` is the wrong size — it
 starts at 2.5 mm.)
 
-## Optional — PM axis launch (€464,72)
+## Recommended — PM axis launch (€464,72)
 
 | # | Part | Description | Qty | Unit | Total |
 |---|---|---|---|---|---|
@@ -212,8 +284,12 @@ polarisation-maintaining: the output polarisation then wanders with fibre temper
 and because your `DMLP550R` dichroic is polarisation-sensitive, that wander converts
 directly into **excitation-power drift** — which will show up in your ODMR baseline and
 in the RIN measurement as spurious 1/f. The waveplate is not needed to *get* light down
-the fibre; it is needed for the light to stay stable once you do. Defer it until coupling
-works, then decide.
+the fibre; it is needed for the light to stay stable once you do. It is the only
+continuous polarisation adjustment the launch has, so it belongs in the build, placed
+**after M2, just before the coupler** (see the reviewed beam path at the top). It can be
+added after the first successful coupling without disturbing the walk. To set it: rotate
+the plate while heating the fibre gently by hand, and stop where the output power behind
+the fixed delivery polariser stops fluctuating.
 
 ---
 
@@ -221,7 +297,7 @@ works, then decide.
 
 | Part | Qty | Role in this stage |
 |---|---|---|
-| `F240FC-532` | 2 | **one** as the launch coupler; the second is a spare — return it against the F810FC-543 (€176,05 each) |
+| `F240FC-532` | 2 | FC/**PC** — wrong for the APC fibre; return both (€176,05 each) against the APC versions. If you want the ensemble delivery option, order **two** `F240APC-532` (+238,55 € over the table above) |
 | `KAD12NT` | 2 | Ø1" kinematic pitch/yaw adapter for the Ø12 mm collimator body (€73,08) |
 | `P3-405BPM-FC-1` | 1 | the fibre |
 | `PM101A` + `S120C` | 1 | coupling-efficiency readout — essential during the walk |
@@ -241,7 +317,8 @@ Verified compatible mounting adapters for the Ø12 mm / M12 × 0.5 `F240FC-532` 
 | APC collimators + AD15F, net of returning 2 × F240FC-532 | 233,16 € | **874,60 €** |
 | Shear plate SI035P | 167,54 € | 1 042,14 € |
 | *credit:* swap fibre to P3-488PM-FC-1 | −37,03 € | 1 005,11 € |
-| PM axis launch (optional, defer) | 464,72 € | 1 469,83 € |
+| PM axis launch (recommended; can follow first coupling) | 464,72 € | 1 469,83 € |
+| *option:* second F240APC-532 for ensemble delivery | 238,55 € | 1 708,38 € |
 | *variant:* plain BB1-E02 instead of BB1-E02P | −54,88 € | |
 
 The first two rows are what unblock work: **€874.60** gets you a correctly-connectorised,
@@ -258,13 +335,16 @@ FiberPort's €681 here and take the shear plate out of the difference.**
 
 ## Layout and procedure
 
+See the reviewed beam path at the top for the full order, including the λ/2 plate,
+polariser, NDs and line filter. The core of the launch:
+
 ```
 LAUNCH END
-DJ532-40 ──► [ID25/M #1] ──► M1 (KS1+BB1-E02P) ──► M2 (KS1+BB1-E02P) ──► [ID25/M #2] ──► F240FC-532 ──► fibre
-  ~1.5 mm                                                                                 (KAD12NT in LMR1/M)
+DJ532-40 ──► M1 (KS1+BB1-E02P) ──► M2 (KS1+BB1-E02P) ──► [ID25/M A] ──► (λ/2) ──► [ID25/M B] ──► F240APC-532 ──► fibre
+  ~1.4 mm                                                                                        (KAD12NT in LMR1/M)
 
 DELIVERY END
-fibre ──► F810FC-543 ──► ~6 mm collimated ──► DMLP550R ──► N40X-PF (7.5 mm pupil) ──► diamond
+fibre ──► F810APC-543 ──► 5.9 mm collimated ──► polariser ─► ND ─► FBW5532-10 ──► DMLP550R ──► N40X-PF ──► diamond
           (AD15F into cage plate)
 ```
 
@@ -285,8 +365,11 @@ that makes walking converge.
 
 ## Open items
 
-- Beam diameter of the `DJ532-40` + `LTC56A/M` assembly is **unmeasured**. This gates
-  item selection (see Gate above). Measure before ordering.
+- Beam diameter of the `DJ532-40` + `LTC56A/M` assembly: viewing-card estimate "just
+  below 1.5 mm" (30 Sep 2026). That provisionally passes the gate. Confirm with the iris
+  (86.5 % transmission) and measure the divergence (diameter at two distances ≥ 1 m apart).
+- Check the laser's polarisation ratio once (polariser in front of the power meter). If it
+  is poor, a fixed polariser *before* M1 is justified as well.
 - **Confirm the collimator engravings** (`F240FC-532` vs `F240APC-532`). The whole
   "corrected optics" tranche hangs on this. It is a two-minute check with a torch.
 - Fibre swap to `P3-488PM-FC-1` is optional and refunds €37.03. Decide it independently
