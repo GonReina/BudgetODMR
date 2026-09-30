@@ -287,9 +287,123 @@ in the RIN measurement as spurious 1/f. The waveplate is not needed to *get* lig
 the fibre; it is needed for the light to stay stable once you do. It is the only
 continuous polarisation adjustment the launch has, so it belongs in the build, placed
 **after M2, just before the coupler** (see the reviewed beam path at the top). It can be
-added after the first successful coupling without disturbing the walk. To set it: rotate
-the plate while heating the fibre gently by hand, and stop where the output power behind
-the fixed delivery polariser stops fluctuating.
+added after the first successful coupling without disturbing the walk. The set-up
+procedure is in the next section.
+
+---
+
+## Polarisation and filtering optics — the λ/2 plate, the polariser and the FBW5532-10
+
+These three parts do not help get light into the fibre. They set the **polarisation**,
+**power stability** and **spectral purity** of the light that comes out, and each has
+exactly one correct place in the beam path.
+
+| # | Part | Where | Job | Mount |
+|---|---|---|---|---|
+| 9 | `WPH10ME-532` λ/2 plate | launch: after M2, before iris B and the coupler | rotate the laser polarisation onto the fibre's slow axis | `RSP1/M` rotation mount (listed above) |
+| 12 | `LPVISE100-A` linear polariser | delivery: first element after the output collimator | clean-up polariser, **fixed** on the slow axis | rotation mount, set once and locked |
+| 13 | `NE10A`, `NE20A` absorptive ND | delivery: after the polariser | discrete power steps (×0.1, ×0.01, ×0.001) | SM1-threaded, tilted 2–5° |
+| — | `FBW5532-10` (owned) | delivery: after the NDs, last element before the DMLP550R | 532 nm laser-line clean-up | fixed; Ø12.5 mm → needs an SM05-to-SM1 thread adapter in a 1″ cage |
+
+### λ/2 plate: matching the laser polarisation to the PM fibre
+
+**What it does.** A half-wave plate turns linear polarisation into linear polarisation,
+mirrored about its fast axis. Rotating the plate by θ rotates the polarisation by **2θ**,
+so 45° of plate rotation covers the full 90° range. The DPSS output is already linear. The
+plate only has to *turn* it to lie along the fibre's slow axis, and it does so without any
+power loss.
+
+**Why the fibre needs this.** A PANDA PM fibre maintains polarisation only for light
+launched along one of its two stress axes. Launched at an angle, the light splits between
+the slow and fast axes. These travel at different speeds, so their relative phase drifts
+with fibre temperature and bending, and the output polarisation wanders. After the
+polarisation-sensitive DMLP550R (532 nm sits on its 533 nm band edge), that wander becomes
+excitation-power noise in the ODMR baseline.
+
+**Why after the mirrors.** The BB1-E02P dielectric mirrors at 45° shift the s and p phases
+differently. Linear light that is neither pure s nor pure p comes off them slightly
+elliptical, and a λ/2 plate cannot remove ellipticity. So: keep the laser polarisation s or
+p on M1/M2 (it usually is when the beam stays in a horizontal plane), and rotate it with
+the plate *after* the last mirror.
+
+**Why not at the delivery end** (in front of the DMLP550R). There it would rotate the
+polarisation at the dichroic's band edge, and change the NV-orientation selectivity at the
+same time. Excitation power and NV response would then vary together, and you could not
+separate them. If you ever want polarisation control *at the sample*, add a **second** λ/2
+between the DMLP550R and the objective.
+
+### Linear polariser: clean-up, not attenuator
+
+**What it does.** Passes only the polarisation component along its axis. It is fixed on the
+fibre's slow axis, so it removes the small fraction of light in the fast axis. With the
+fibre's 15 dB minimum extinction ratio that fraction is ≤ 3 %. The light reaching the
+dichroic then always has the same polarisation direction. Any residual launch imperfection
+shows up as a ≤ 3 % power change, which a reference photodiode can normalise, instead of a
+polarisation change, which nothing downstream can correct.
+
+**Why not rotate it for power control** (Malus law, as the shopping list originally
+proposed). Behind a PM fibre the output always contains a small, phase-drifting
+fast-axis component. With the polariser at angle θ to the slow axis, the transmitted power
+swings by up to ±2√(ε(1−ε))·sinθ·cosθ as that phase drifts, where ε = 10^(−ER/10). At
+15 dB and θ = 45° that is **±17 %**. On the slow axis (θ = 0) the swing vanishes. Use the
+NDs for power steps. For *continuous* power control, the right tool is a second λ/2 +
+polariser pair *before* the fibre, so the fibre always receives the same polarisation.
+
+**Why after the output collimator, not before it or at the launch.**
+- *Between the fibre and the collimator lens:* the beam diverges at ±4.9° and there is no
+  room inside a collimator package. Any plate there also moves the focus (≈ 0.7 mm for 2 mm
+  of glass) and spoils the collimation.
+- *At the launch:* it is redundant if the DPSS is already well polarised (check once, see
+  Open items). As a rotating element it would misalign the input from the PM axis.
+- *In the collimated delivery beam:* it simply transmits.
+
+### FBW5532-10: laser-line filter after the fibre
+
+**What it does.** A hard-coated 532 nm bandpass, 10 nm FWHM, ≥ 90 % transmission and
+OD > 5 blocking outside the band. It removes everything in the excitation beam that is not
+532 nm.
+
+**Why it moves from the laser to after the fibre.** The silica fibre itself produces a weak
+broadband Raman and fluorescence background above 540 nm, in the NV emission band. That
+light takes a path to the detector: part is reflected by the DMLP550R towards the sample,
+~17 % is back-reflected by the diamond surface, and it then passes the dichroic and the
+FELH0550 like real PL. A filter before the fibre cannot remove light the fibre creates.
+One filter after the fibre removes the fibre background *and* anything the laser emits
+outside 532 nm, so a second one before the fibre is unnecessary.
+
+**Why a fixed mount, and why last.** The FBW series is **wedged** (≈ 30′ per the vendor
+text) to suppress etalon fringes. That tilts the transmitted beam by (n − 1)·α ≈ 4 mrad.
+At the objective pupil a beam *angle* becomes a *lateral focus shift* of f·δ: **≈ 20 µm**
+with the N40X-PF and ≈ 64 µm with the ACL25416U. Rotating, removing or re-seating the
+filter therefore moves the focus on the sample. Put it in a fixed mount, never touch it,
+and do the final pointing into the objective after it. Placed last, nothing downstream has
+to be re-aligned when upstream NDs are swapped.
+
+**Size and angle.** It is Ø12.5 mm. A 5.9 mm F810 beam loses ~0.3 % at an assumed ~Ø10 mm
+clear aperture, and the 1.3 mm F240 beam loses nothing. Tilting it a few degrees to keep
+its reflection out of the fibre shifts the passband by well under 1 nm, which is harmless
+for a 10 nm band.
+
+### ND filters (for completeness)
+
+Absorptive, so they dissipate rather than reflect the blocked power (fine at ≤ 40 mW).
+A 3° tilt shifts the beam by ~36 µm, which is irrelevant at a 7.5 mm pupil, and keeps
+their ~4 % surface reflections out of the fibre. They are plane plates, not wedges, but
+their parallelism is not specified. Check the focus position once when you swap them (a
+0.1 mrad deviation moves the N40X-PF focus by 0.5 µm).
+
+### Delivery-optics parts (€315.49; already in tier B of `NV_upgrade_shopping_list.xlsx`)
+
+| # | Part | Description | Qty | Unit | Total |
+|---|---|---|---|---|---|
+| 12 | [LPVISE100-A](https://www.thorlabs.com/thorproduct.cfm?partnumber=LPVISE100-A) | Ø1″ linear polariser, 400–700 nm | 1 | 103,08 € | 103,08 € |
+| 12a | [RSP1/M](https://www.thorlabs.com/thorproduct.cfm?partnumber=RSP1/M) | rotation mount for the polariser (set once, then locked) | 1 | 95,73 € | 95,73 € |
+| 13 | [NE10A](https://www.thorlabs.com/thorproduct.cfm?partnumber=NE10A) | absorptive ND, OD 1.0, SM1-mounted | 1 | 58,34 € | 58,34 € |
+| 13a | [NE20A](https://www.thorlabs.com/thorproduct.cfm?partnumber=NE20A) | absorptive ND, OD 2.0, SM1-mounted | 1 | 58,34 € | 58,34 € |
+
+Note that the λ/2 plate (#9) and the polariser each need their **own** rotation mount. The
+single `RSP1/M` in the shopping list was meant for a rotating polariser. In this design it
+holds the polariser, and the PM-launch tranche above supplies the second one for the plate.
 
 ---
 
@@ -302,6 +416,7 @@ the fixed delivery polariser stops fluctuating.
 | `P3-405BPM-FC-1` | 1 | the fibre |
 | `PM101A` + `S120C` | 1 | coupling-efficiency readout — essential during the walk |
 | `VRC2` | 1 | beam visualisation |
+| `FBW5532-10` | 1 | laser-line filter; **moves** from the free-space laser path to the delivery end, after the NDs |
 | `CCHK/M`, `HW-KIT1/M`, `HW-KIT2/M` | — | hex keys and screws |
 
 Verified compatible mounting adapters for the Ø12 mm / M12 × 0.5 `F240FC-532` body:
@@ -319,6 +434,7 @@ Verified compatible mounting adapters for the Ø12 mm / M12 × 0.5 `F240FC-532` 
 | *credit:* swap fibre to P3-488PM-FC-1 | −37,03 € | 1 005,11 € |
 | PM axis launch (recommended; can follow first coupling) | 464,72 € | 1 469,83 € |
 | *option:* second F240APC-532 for ensemble delivery | 238,55 € | 1 708,38 € |
+| Delivery optics: polariser + rotation mount + 2 ND (already in tier B) | 315,49 € | 2 023,87 € |
 | *variant:* plain BB1-E02 instead of BB1-E02P | −54,88 € | |
 
 The first two rows are what unblock work: **€874.60** gets you a correctly-connectorised,
@@ -362,6 +478,24 @@ that makes walking converge.
    for both axes. This converges — random fiddling does not.
 5. Expect **> 50 %** into the fibre once mode-matched. If you plateau below ~20 % and the
    shear plate says the beam is collimated, the beam diameter is wrong — revisit the gate.
+
+Then the polarisation and filter optics, in this order (power meter at the delivery end):
+
+6. **Output collimator + polariser.** Fit the delivery collimator, then the polariser in its
+   rotation mount. Rotate the polariser for maximum transmission (P_max), then 90° away
+   for minimum (P_min). The extinction ratio is 10·log(P_max/P_min).
+7. **λ/2 plate (launch side).** Leave the polariser at the *minimum* (crossed) position.
+   Warm a length of the fibre gently with your hand, or flex it slowly. If P_min
+   fluctuates, the launch is off-axis. Rotate the λ/2 plate a few degrees at a time,
+   re-find the polariser minimum, and repeat. Stop when P_min is smallest and steady;
+   aim for ≥ 15 dB (the fibre's minimum spec). Inserting the plate does not disturb the
+   coupling, so re-peak M2 only if the power dropped. Thorlabs align the PM slow axis to
+   the connector key, which gives a first guess.
+8. **Lock the polariser at maximum** (the slow axis). Record the angle.
+9. **NDs and FBW5532-10.** Insert the NDs tilted 2–5°, then the FBW5532-10 in its fixed
+   mount, then align into the DMLP550R and the objective *after* the FBW is in place.
+   Check the power stability behind the whole chain for ~30 min while touching the fibre.
+   The residual drift should be a few % or less.
 
 ## Open items
 
