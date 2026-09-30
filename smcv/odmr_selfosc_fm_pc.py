@@ -46,7 +46,18 @@ from odmr_sensitivity_fm_pc import (take_spectrum, find_working_point,
                                     pick_working_point, GAMMA)
 
 # --- run settings (local to this script) ---
-GAIN_LIST  = (0.6, 1.0, 1.4, 1.8, 2.0, 2.1, 2.2, 2.4, 2.7, 3.0, 3.4)
+# Gain grid for the bifurcation diagram: coarse below threshold, FINE (0.05
+# steps) through the onset and first period-doubling region, medium above.
+# 36 gains x N_CYC cycles at ~0.4 s/cycle is ~1 h; trim FINE_STEP / N_CYC or
+# the fine range if you need a faster scan.
+GAIN_COARSE = (0.4, 0.7, 1.0, 1.2, 1.4)
+FINE_START, FINE_STOP, FINE_STEP = 1.5, 2.8, 0.05
+GAIN_UPPER  = (2.9, 3.0, 3.2, 3.4)
+GAIN_LIST = tuple(sorted(set(
+    list(GAIN_COARSE)
+    + [round(float(g), 2) for g in
+       np.arange(FINE_START, FINE_STOP + 1e-9, FINE_STEP)]
+    + list(GAIN_UPPER))))
 N_CYC      = 250     # loop cycles per gain value
 G_STAT     = 2.3     # gain for the long statistics run (just above onset)
 N_STAT     = 4000    # cycles for the statistics run
@@ -93,8 +104,13 @@ def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     stamp = datetime.now().isoformat(timespec="seconds")
 
-    print(f"SELF-OSCILLATION run: gains {GAIN_LIST}, {N_CYC} cycles each; "
+    est_min = (len(GAIN_LIST) * N_CYC + N_STAT) * 0.42 / 60.0
+    print(f"SELF-OSCILLATION run: {len(GAIN_LIST)} gains "
+          f"({GAIN_LIST[0]}..{GAIN_LIST[-1]}, fine {FINE_STEP} in "
+          f"{FINE_START}-{FINE_STOP}), {N_CYC} cycles each; "
           f"stats at G={G_STAT} x {N_STAT}")
+    print(f"  estimated duration ~{est_min:.0f} min at ~0.42 s/cycle "
+          f"(plus the sweep)")
 
     src = SMCV100B(SMCV_IP, SMCV_PORT)
     src.configure(POWER_DBM)

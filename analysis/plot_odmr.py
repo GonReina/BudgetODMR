@@ -63,8 +63,8 @@ if __name__ == "__main__":
     # for i in range(1, 6):
     # INPUT_FILE = os.path.join(DATA_DIR, f"run_0{i}.csv")
     # SAVE_FIG   = os.path.join(DATA_DIR, f"run_0{i}.png") 
-    INPUT_FILE = r"C:\Users\qute\Downloads\rsattempt\07-07-2026\odmr_runs_with_magnet\run_01.csv"
-    SAVE_FIG = r"C:\Users\qute\Downloads\rsattempt\07-07-2026\odmr_runs_with_magnet\run_01.png"
+    INPUT_FILE = r"C:\Users\qute\Downloads\rsattempt\14-09-2026\odmr_lockin_fm_average.csv"
+    SAVE_FIG = r"C:\Users\qute\Downloads\rsattempt\14-09-2026\run_01.png"
     # if i > 9:
     #     INPUT_FILE = os.path.join(DATA_DIR, f"run_{i}.csv")
     #     SAVE_FIG   = os.path.join(DATA_DIR, f"run_{i}.png")

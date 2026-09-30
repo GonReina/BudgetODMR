@@ -117,9 +117,15 @@ def analyse_gainscan(gains_f, skip_frac=0.33):
     base = float(np.median(a2[:3]))
     thr = max(4 * base, 0.05)
     above = a2 > thr
-    if not above.any():
+    # sustained crossing: two consecutive points above threshold (a single
+    # noisy a2 excursion must not trigger the onset)
+    sustained = above[:-1] & above[1:]
+    if sustained.any():
+        i = int(np.argmax(sustained))
+    elif above.any():
+        i = int(np.argmax(above))
+    else:
         return gains, spread, a2, float("nan"), float("nan"), thr
-    i = int(np.argmax(above))
     if i == 0:
         return gains, spread, a2, float(gains[0]), 0.0, thr
     # linear interpolation of the crossing + half grid spacing as uncertainty
