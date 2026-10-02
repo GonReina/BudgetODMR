@@ -2,6 +2,15 @@
 [check] same with linear MW (other transition 50 MHz away): 3.0e-04 (off-resonant light shift only)
 [check] single NV, degenerate, saturating linear drive: ms=0 depletion coherent 0.502 (theory 1/2), incoherent 0.667 (theory 2/3)
 [check] sigma+ at degeneracy == isolated line with sqrt2*Omega: max |diff| = 3.3e-16
+[check] strain E = 3 MHz along the MW axis, B = 0: Lindblad vs eigenstate rate model max |diff| = 7.8e-16 (the drive addresses one strain eigenstate only)
+
+[check] terms left out of the Hamiltonian: full 9-level electron x 14N model vs the model's ESR line positions
+    B =   0.2 mT: max deviation  7.626 kHz | without A_perp 4.5e-10 kHz (nuclear Zeeman + quadrupole cancel exactly) | nuclear Zeeman alone moves it by 5.5e-07 kHz
+    B =  10.0 mT: max deviation  7.944 kHz | without A_perp 9.1e-10 kHz (nuclear Zeeman + quadrupole cancel exactly) | nuclear Zeeman alone moves it by 4.4e-05 kHz
+[check] rotating-wave approximation: full lab-frame evolution (counter-rotating terms, MW component along the NV axis) vs the RWA model, resonant degenerate Rabi, 2 us
+    Omega/2pi =    1 MHz: max |dP0| transverse MW 8.9e-05, MW at 45 deg to the NV axis (B1z = B1perp) 8.9e-05
+    Omega/2pi =   10 MHz: max |dP0| transverse MW 9.8e-04, MW at 45 deg to the NV axis (B1z = B1perp) 1.2e-03
+    Omega/2pi =   30 MHz: max |dP0| transverse MW 4.5e-03, MW at 45 deg to the NV axis (B1z = B1perp) 1.2e-02
 
 R = peak contrast at degeneracy / peak of one isolated line (linear MW):
   Ideal single NV (no dephasing): at Omega=2.51 MHz  R_coh=1.003  R_inc=1.331
@@ -27,4 +36,21 @@ Time domain (no laser during MW):
   Ideal single NV (no dephasing): Rabi frequency degenerate/isolated = 1.41/1.00 MHz (ratio 1.41, sqrt2 = 1.41)
   DNVB14-like ensemble (sigma 0.5 MHz, 14N, T2 2 us): Rabi frequency degenerate/isolated = 1.44/1.01 MHz (ratio 1.42, sqrt2 = 1.41)
 
-(run time 5 s; figures in c:\Users\Gonzalo\Downloads\BudgetODMR\analysis\vsystem_sim_out)
+PL spectra vs Rabi frequency: minimum PL (normalised to MW off), coherent / incoherent:
+  Ideal single NV (no dephasing), gamma*B = 0.5 MHz -> 0.1: 0.883/0.883  0.3: 0.842/0.846  1.0: 0.800/0.811  3.0: 0.827/0.801
+  Ideal single NV (no dephasing), gamma*B = 0.0 MHz -> 0.1: 0.869/0.834  0.3: 0.852/0.804  1.0: 0.849/0.800  3.0: 0.849/0.800
+  DNVB14-like ensemble (sigma 0.5 MHz, 14N, T2 2 us), gamma*B = 0.5 MHz -> 0.1: 0.975/0.975  0.3: 0.922/0.922  1.0: 0.845/0.849  3.0: 0.804/0.809
+  DNVB14-like ensemble (sigma 0.5 MHz, 14N, T2 2 us), gamma*B = 0.0 MHz -> 0.1: 0.967/0.967  0.3: 0.916/0.916  1.0: 0.844/0.848  3.0: 0.804/0.808
+
+Strain / electric field E, B = 0, Omega/2pi = 1 MHz. Signature = peak coherent / peak incoherent (eigenstate rate model) - 1:
+  (a) single ideal NV, fixed E, MW at angle phi to the strain axis:
+      phi  0.0 deg: E=0.01:+0.0%  E=0.056:+0.0%  E=0.32:-0.0%  E=1.8:+0.0%  E=10:+0.0%
+      phi 22.5 deg: E=0.01:-24.4%  E=0.056:-23.4%  E=0.32:-1.7%  E=1.8:+2.7%  E=10:+0.0%
+      phi 45.0 deg: E=0.01:-24.5%  E=0.056:-22.8%  E=0.32:-1.3%  E=1.8:+1.9%  E=10:+0.1%
+  (b) random E (Ex, Ey ~ N(0, sigma_E^2): random size and direction):
+      ideal single-NV dynamics: sigma_E = 0: -24.59 %  | 0.03: -23.55 %  0.1: -18.67 %  0.3: -1.25 %  1: +3.64 %  3: -0.04 %
+          max |coh - inc| / peak at the same sigma_E: 23.5 %  18.7 %  3.6 %  8.2 %  3.6 %
+      dense ensemble (sigma 0.5, 14N, T2 2 us, +-1 cycling on): sigma_E = 0: +2.00 %  | 0.03: +2.14 %  0.1: +1.91 %  0.3: +1.09 %  1: +0.35 %  3: -0.08 %
+          max |coh - inc| / peak at the same sigma_E: 2.5 %  2.6 %  2.9 %  2.3 %  1.2 %
+
+(run time 19 s; figures in C:\Users\qute\Downloads\BudgetODMR\analysis\vsystem_sim_out)

@@ -49,13 +49,35 @@ The code uses the basis $\{|+1\rangle,|0\rangle,|-1\rangle\}$ (indices 0, 1, 2).
   directly. Its eigenstates are $(|+1\rangle \pm |-1\rangle)/\sqrt2$ at $D\pm E$, and with a field present
   the lines sit at $D \pm\sqrt{\delta^2+E^2}$.
 
-Terms that are left out on purpose:
+Terms that are left out on purpose. The full ¹⁴N ground-state Hamiltonian adds [6, 20]
 
-* The nuclear quadrupole term $P I_z^2$ ($P\approx-5$ MHz) shifts all three $m_s$ levels by the
-  same amount for a given $m_I$, so it cancels from every ESR transition.
-* The transverse hyperfine term $A_\perp(S_+I_- + S_-I_+)/2$ ($A_\perp\approx-2.7$ MHz) mixes states
-  that differ in energy by about $D$. Its effect is of order $A_\perp^2/D \sim$ kHz, which is negligible here.
-* Transverse magnetic field ($B_\perp S_x$, etc.). The model assumes the field is along the NV axis.
+$$
+\frac{H_N}{h} = A_\perp (S_x I_x + S_y I_y) + P\,(I_z^2 - \tfrac23) - \gamma_n B_\parallel I_z ,
+$$
+
+and each of these is either exactly zero for an ESR line or tiny:
+
+* **Nuclear Zeeman** $-\gamma_n B_\parallel I_z$, with $\gamma_n(^{14}\mathrm{N}) = 3.077$ kHz/mT, and the
+  **quadrupole** $P I_z^2$ ($P\approx-4.95$ MHz). For a given $m_I$ both shift $|0\rangle$, $|+1\rangle$ and
+  $|-1\rangle$ by the *same* amount, because they act only on the nucleus. An ESR transition keeps $m_I$, so
+  both cancel exactly from every line position. The nuclear Zeeman term would matter for NMR
+  ($\Delta m_I = \pm1$) or for nuclear polarisation, but neither is modelled here.
+* **Transverse hyperfine** $A_\perp(S_+I_- + S_-I_+)/2$ ($A_\perp\approx-2.7$ MHz). This mixes
+  $|0, m_I\rangle$ with $|\pm1, m_I\mp1\rangle$, which lie about $D$ away. The line shift is therefore of order
+  $A_\perp^2/D \sim$ kHz.
+* **Transverse magnetic field** ($B_\perp S_x$, etc.). The model assumes the field is along the NV axis.
+
+The script checks this directly (`check_nuclear`). It diagonalises the full 9-level electron ⊗ ¹⁴N
+Hamiltonian and compares every ESR line with the model's $D \pm (\gamma_e B + A_\parallel m_I)$:
+
+| $B_\parallel$ | max deviation | with $A_\perp = 0$ | change from the nuclear Zeeman term alone |
+|---|---|---|---|
+| 0.2 mT | 7.6 kHz | $5\times10^{-10}$ kHz | $6\times10^{-7}$ kHz |
+| 10 mT | 7.9 kHz | $9\times10^{-10}$ kHz | $4\times10^{-5}$ kHz |
+
+The only residual is the ~8 kHz second-order shift from $A_\perp$. That is about 300× smaller than
+the 2.16 MHz hyperfine splitting and far below any linewidth here. The nuclear Zeeman term is
+invisible at the 10⁻⁵ kHz level.
 
 ### 2.2 Microwave drive, rotating frame, RWA
 
@@ -91,6 +113,55 @@ linear one has $\sqrt2$ larger amplitude on the one transition it drives.
 
 The code multiplies $H/h$ by $2\pi$ so that it is in rad/µs (with frequencies in MHz). The
 dissipative rates below are already in 1/µs.
+
+### 2.2.1 Is the rotating frame valid? Longitudinal and counter-rotating terms
+
+The antenna field generally has a component along the NV axis as well as across it. For a
+given NV orientation the full lab-frame drive is
+
+$$
+\frac{H_\text{MW}}{h} = \Omega_L\cos(2\pi f t)\,(\cos\varphi\,S_x + \sin\varphi\,S_y)
+\;+\; \Omega_z \cos(2\pi f t)\,S_z ,
+\qquad \Omega_L = \sqrt2\,\Omega,\quad \Omega_z = \gamma_e B_{1,\parallel}.
+$$
+
+Going to the rotating frame $U = \exp[i2\pi f t\,S_z^2]$ is an **exact** unitary change of picture,
+not an approximation. Three things happen:
+
+1. **The static terms are unchanged.** $D S_z^2$ becomes the detuning. $\delta S_z$ and the strain
+   term both commute with $S_z^2$ ($S_z^2$ is the identity on the ±1 pair), so they are unaffected.
+2. **The transverse drive** gives the time-independent couplings $\Omega/2$ plus *counter-rotating*
+   terms oscillating at $2f$. Dropping those is the rotating-wave approximation (RWA). They cause
+   the Bloch–Siegert shift, of order $\Omega^2/(4f)$ [21], and small wiggles of relative size
+   about $\Omega/f$.
+3. **The longitudinal term** $\Omega_z\cos(2\pi f t)S_z$ also commutes with $U$, so it survives
+   unchanged as a *longitudinal, time-dependent* term. That is exactly the concern: it is not
+   in the RWA model. A second exact transformation $\exp[i(\Omega_z/f)\sin(2\pi f t)S_z]$ removes it,
+   turning it into frequency modulation of the ±1 levels with modulation index $\beta = \Omega_z/f$.
+   Expanding in Bessel functions [22], the resonant couplings are rescaled by
+   $J_0(\beta) \approx 1-\beta^2/4$, and all other terms sit at multiples of $f$, i.e. ~2.9 GHz off
+   resonance. For $\Omega_z = 42$ MHz, $\beta = 0.015$ and the rescaling is $6\times10^{-5}$. A longitudinal
+   drive would only matter if something were resonant at $f$ itself, for example a ±1 splitting
+   of $2r \approx f$. That needs fields of about 50 mT, nothing like this rig.
+
+The Lindblad terms are unaffected by the change of frame. A jump operator $|0\rangle\langle\pm1|$
+only picks up a phase $e^{\pm i2\pi f t}$, which cancels in $L\rho L^\dagger$, and $S_z$ and the
+projectors commute with $U$.
+
+The script checks this numerically (`check_rwa`). It propagates the full lab-frame Hamiltonian,
+$D = 2870$ MHz, counter-rotating terms and an optional longitudinal component, exactly over one MW
+period (400 steps), then stroboscopically for 2 µs. It compares $P_0(t)$ with the RWA model for a
+resonant, degenerate Rabi pulse:
+
+| $\Omega/2\pi$ | max $|\Delta P_0|$, transverse MW | MW at 45° to the NV axis ($B_{1z} = B_{1\perp}$) |
+|---|---|---|
+| 1 MHz | $9\times10^{-5}$ | $9\times10^{-5}$ |
+| 10 MHz | $1.0\times10^{-3}$ | $1.2\times10^{-3}$ |
+| 30 MHz | $4.5\times10^{-3}$ | $1.2\times10^{-2}$ |
+
+The error grows like $\Omega/f$, as expected for terms at $f$ and $2f$, and it is mostly fast
+wiggles that CW measurements average away. The RWA is fine for everything in this note. It would
+need revisiting only for Rabi frequencies of hundreds of MHz.
 
 ### 2.3 Bright and dark states
 
@@ -168,22 +239,75 @@ frequency and every ensemble member is solved in one vectorised call.
 
 ## 4. Incoherent reference model (`contrast_incoherent`)
 
+### 4.1 Which states are "incoherent"?
+
+"Incoherent driving" only means something in a particular basis. The natural basis is the
+**eigenstates of the undriven Hamiltonian**: a rate model between them is the secular
+approximation, which keeps populations and drops every coherence between non-degenerate
+eigenstates [15]. For the ±1 pair, the undriven block
+
+$$
+\begin{pmatrix}\delta & E\\ E & -\delta\end{pmatrix}
+\;\Rightarrow\; |a\rangle = (\cos\tfrac\theta2,\ \sin\tfrac\theta2),\ \ |b\rangle = (-\sin\tfrac\theta2,\ \cos\tfrac\theta2),
+\quad \epsilon_{a,b} = \pm r,\ \ r=\sqrt{\delta^2+E^2},\ \ \tan\theta = E/\delta ,
+$$
+
+has eigenstates $|a\rangle, |b\rangle$ in the $(|{+1}\rangle, |{-1}\rangle)$ basis.
+
+* **$E = 0$:** the eigenstates are $|+1\rangle$ and $|-1\rangle$, and this is the familiar
+  "two independent transitions" model.
+* **$E \gg \delta$:** they are the strain states $(|{+1}\rangle\pm|{-1}\rangle)/\sqrt2$. These are superpositions of
+  ±1, but that is a static property of a strained NV, not a sign of coherent driving.
+
+The **coherence signature** is then defined basis-independently, as what the full Lindblad model
+gives *beyond* this secular rate model.
+
+### 4.2 The rate model
+
 For a single two-level transition, setting the coherence's equation of motion to zero (it
 relaxes at $\Gamma_2$, much faster than the populations change) gives the textbook Lorentzian
-pumping rate [18]:
+pumping rate [18]. Applied to each eigen-transition $|0\rangle\to|k\rangle$, $k = a, b$:
 
 $$
-W(\Delta) = \frac{\Omega^2}{2}\,\frac{\Gamma_2}{\Gamma_2^2+\Delta^2}
-\qquad (\Omega,\Delta\ \text{in rad/µs}),\quad \Delta_\pm = 2\pi(\Delta f \mp \delta).
+W_k = \frac{\Omega_k^2}{2}\,\frac{\Gamma_2}{\Gamma_2^2+\Delta_k^2},
+\qquad \Omega_k = 2\,|\langle k|V|0\rangle|,\quad \Delta_k = 2\pi(\epsilon_k - \Delta f)
+\qquad (\text{rad/µs}),
 $$
 
-In steady state this elimination is **exact**, because the coherence's time derivative really is
-zero. The script checks this to $10^{-16}$. Each transition is then a pair of rate equations
-($0\to\pm1$ at $W_\pm$; $\pm1\to0$ at $W_\pm+\Gamma_p$), which gives
+with $\langle a|V|0\rangle = \cos\tfrac\theta2\,v_+ + \sin\tfrac\theta2\,v_-$ and
+$\langle b|V|0\rangle = -\sin\tfrac\theta2\,v_+ + \cos\tfrac\theta2\,v_-$, where $v_\pm = \tfrac\Omega2 c_\pm$ are the
+drive couplings of Section 2.2. $\Gamma_2$ is the same as in Section 3, because every collapse operator
+treats $|a\rangle$ and $|b\rangle$ alike.
+
+The two remaining rates in the secular model are:
+
+* **Repolarisation:** $|a\rangle, |b\rangle \to |0\rangle$ at $\Gamma_p$, since $\sum_\pm |\langle\pm1|k\rangle|^2 = 1$.
+* **Noise-induced transfer:** the $S_z$ noise moves population $a\leftrightarrow b$ at
+  $k_{ab} = (2/T_2)\,|\langle a|S_z|b\rangle|^2 = (2/T_2)\sin^2\theta$.
+
+The steady state is then analytic:
 
 $$
-p_{\pm1} = a_\pm\,p_0,\quad a_\pm=\frac{W_\pm}{W_\pm+\Gamma_p},\quad p_0 = \frac1{1+a_++a_-}.
+\frac{p_a}{p_0} = \frac{W_a B + k_{ab}W_b}{AB-k_{ab}^2},\quad
+\frac{p_b}{p_0} = \frac{W_b A + k_{ab}W_a}{AB-k_{ab}^2},\quad
+A = W_a+\Gamma_p+k_{ab},\ B = W_b+\Gamma_p+k_{ab},
 $$
+
+with $p_0 + p_a + p_b = 1$.
+
+At $E=0$, $k_{ab}=0$ and this reduces to the two-transition model
+$p_{\pm1} = a_\pm\,p_0$, $a_\pm=W_\pm/(W_\pm+\Gamma_p)$, $p_0 = 1/(1+a_++a_-)$, so every result at $E=0$ is
+unchanged. For an isolated transition the elimination is **exact**, because the coherence's time
+derivative really is zero in steady state. The script checks this to $10^{-16}$.
+
+**A subtlety at exact degeneracy.** When $\delta = E = 0$, any basis of the ±1 pair is an
+eigenbasis, so the "incoherent" reference is not unique. The script uses $|\pm1\rangle$, which asks
+whether the $0\to+1$ and $0\to-1$ transitions act independently. Take the opposite extreme: a
+tiny $E$ aligned with the MW ($\varphi = 0$) makes the bright and dark states themselves the
+eigenstates. The secular model then also leaves the dark state undriven, and coherent and
+incoherent agree exactly (the script checks this to $10^{-15}$; Figure 7a, $\varphi = 0$). The
+dark-state "signature" therefore depends on the reference you compare against. That is one more
+reason CW contrast is a weak witness of coherence.
 
 For one isolated line this yields the standard power-broadened CW ODMR line [19]:
 
@@ -196,8 +320,8 @@ With the default parameters ($\Omega/2\pi = 1$ MHz, $\Gamma_2=1.1$/µs, $\Gamma_
 the line is strongly saturated and about 4.7 MHz wide.
 
 The incoherent model shares the same $|0\rangle$ population between both transitions but cannot
-form $\rho_{+1,-1}$. It also ignores $E$. The comparison is therefore only meaningful at $E=0$,
-which is the default in every figure.
+form a coherence between $|a\rangle$ and $|b\rangle$. Because it is built on the eigenstates, the
+comparison remains meaningful at any $E$ (Section 10).
 
 ## 5. Ensemble averaging (`ensemble`)
 
@@ -210,6 +334,12 @@ $\delta$:
   For SQ Ramsey this corresponds to $T_2^* = 1/(\sqrt2\pi\sigma)$, about 0.45 µs at $\sigma=0.5$ MHz.
 * **¹⁴N hyperfine.** The three $m_I$ classes are equally populated (no nuclear polarisation at
   low field), at $\delta_0 + A_\parallel m_I$.
+* **Random strain / electric field** (`sigma_E` > 0). In a dense sample the transverse $E$ comes
+  mostly from the electric fields of nearby charges, with random size and direction [5]. The model
+  takes $E_x, E_y \sim N(0, \sigma_E^2)$. Then $|E|$ is Rayleigh distributed, integrated with
+  Gauss–Laguerre quadrature in $|E|^2$ (`nqE` nodes), and its direction is uniform, integrated
+  over `nphiE` angles. Only the relative angle $\varphi$ between the strain axis and the MW matters,
+  and only through $2\varphi$. `sigma_E` > 0 replaces the fixed `E`, `phi`.
 
 This is a **static** average: each member keeps its own $\delta$ for the whole measurement. The
 script contrasts it with the **dynamic**, Markovian dephasing $\propto 1/T_2$ described in Section 3.
@@ -220,11 +350,18 @@ script contrasts it with the **dynamic**, Markovian dephasing $\propto 1/T_2$ de
   with only the $S_z$ dephasing (laser off) and records $p_0(t)$. At degeneracy with linear MW the
   Rabi frequency is $\sqrt2\,\Omega$; for an isolated line it is $\Omega$. `dominant_freq` extracts the
   frequency from a windowed, zero-padded FFT after removing a cubic trend.
-* **Ramsey** (`ramsey`). The code evaluates analytic ideal-pulse expressions in the frame at $D$:
-  $$P_0^\text{SQ} = \tfrac12\big[1 + e^{-t/T_2}\langle\cos 2\pi\delta t\rangle\big],\qquad
-    P_0^\text{DQ} = \tfrac12\big[1 + e^{-4t/T_2}\langle\cos 2\pi(2\delta) t\rangle\big].$$
+* **Ramsey** (`ramsey`). The code evaluates analytic ideal hard-pulse expressions in the frame at $D$,
+  with $r=\sqrt{\delta^2+E^2}$:
+  $$P_0^\text{SQ} = \tfrac12\big[1 + e^{-t/T_2}\langle\cos 2\pi r t\rangle\big],\qquad
+    P_0^\text{DQ} = \Big\langle 1 - \tfrac{\delta^2}{r^2}\,\tfrac12\big[1 - e^{-4t/T_2}\cos 2\pi(2r) t\big]\Big\rangle .$$
+  SQ uses π/2 pulses on the upper eigen-transition. DQ uses π pulses between $|0\rangle$ and
+  $(|{+1}\rangle+|{-1}\rangle)/\sqrt2$: the return probability after free evolution is
+  $1-(\delta/r)^2\sin^2(2\pi r t)$. At $E=0$ these reduce to
+  $\tfrac12[1 + e^{-t/T_2}\cos 2\pi\delta t]$ and $\tfrac12[1 + e^{-4t/T_2}\cos 2\pi(2\delta) t]$.
   DQ precesses at twice the field-sensitive frequency and is immune to common-mode shifts of $D$
-  (temperature, axial strain) [10–12].
+  (temperature, axial strain) [10–12]. Strain raises the DQ frequency to $2r$ and cuts its
+  visibility to $(\delta/r)^2$, which is why DQ magnetometry needs $\gamma_e B \gg E$. The decay factors
+  are the $E=0$ ones.
 
 ## 7. What the figures show (default run, `summary.txt`)
 
@@ -235,17 +372,25 @@ script contrasts it with the **dynamic**, Markovian dephasing $\propto 1/T_2$ de
 | `fig3_washout` | signature $S = 1 - R_\text{coh}/R_\text{inc}$ (ideal ¼) against (a) static spread σ, (b) $T_2$ | (a) the drive protects the dark/bright structure (Autler–Townes splitting $\sim\Omega$ against B↔D mixing $\delta$), so $S$ halves at $\sigma\approx0.35\,\Omega$; (b) DQ dephasing feeds $|D\rangle$ at a rate set by $4/T_2$ independent of drive, so $S$ halves at $4/T_2\approx\Gamma_p$ |
 | `fig4_lineshape_ambiguity` | fit of a coherent ensemble spectrum with the incoherent model (free $\Omega,\sigma,C_0$) | residual about 0.7 % of peak: the lineshape alone cannot reveal the coherence |
 | `fig5_time_domain` | Rabi (degenerate vs isolated) and SQ vs DQ Ramsey | Rabi ratio 1.41 ≈ √2 even in the ensemble; DQ Ramsey at $2\gamma B$ |
+| `fig6_pl_vs_rabi` | PL spectra for $\Omega/2\pi$ = 0.1–3 MHz, coherent vs incoherent, at $\gamma B$ = 0.5 and 0 MHz | single NV: min PL 0.849 vs 0.800 at degeneracy and saturation; ensemble: 0.844 vs 0.848 at 1 MHz, i.e. < 0.5 % of the PL |
+| `fig7_strain` | coherence signature (peak coherent / peak incoherent − 1) against (a) fixed $E$ at three MW angles, (b) a random $E$ spread $\sigma_E$ | the signature survives only while $E \lesssim 0.3\,\Omega$; a random $E$ spread washes it out like a static field spread; dense ensemble +2.0 % → +0.35 % at $\sigma_E$ = 1 MHz (Section 10) |
 
 Conclusion: CW ODMR on a realistic ensemble is a weak and ambiguous probe of the $\pm1$ coherence.
 The $\sqrt2$ Rabi enhancement and DQ Ramsey are the robust signatures.
 
-## 8. Review of the Hamiltonian, and a change made
+## 8. Review of the Hamiltonian, and changes made
 
 I checked the rotating-frame Hamiltonian numerically against the lab-frame
 $D S_z^2 + \delta S_z + E(S_x^2-S_y^2)$, so its eigenvalues match the ODMR line positions
 $D\pm\sqrt{\delta^2+E^2}$. I also checked the dissipator's coherence decay rates against
 Section 3. **The Hamiltonian is standard.** The signs, the $E$ matrix element, the hyperfine
-folding into $\delta$, the RWA, and the σ± power normalisation are all correct.
+folding into $\delta$, the RWA, and the σ± power normalisation are all correct. Two further
+checks now run every time the script runs:
+
+* **Omitted nuclear terms** (nuclear Zeeman, quadrupole, transverse hyperfine): at most an
+  ~8 kHz line shift, all of it from $A_\perp$ (Section 2.1).
+* **RWA and the longitudinal MW component:** $|\Delta P_0| \lesssim 10^{-3}$ up to
+  $\Omega/2\pi = 10$ MHz (Section 2.2.1).
 
 There was one **hidden, non-generic assumption**. The linear-drive couplings were hard-coded as
 $c_+=c_-=1$. That fixes the MW polarisation along the strain axis ($\varphi=0$), so the drive
@@ -361,14 +506,59 @@ With the current `smcv/config.json`, several settings each blur the triplet:
   add to the width. With $\sigma \gtrsim 0.7$ MHz the triplet cannot be resolved by any choice of
   power. Align $B$ so one orientation is isolated, keep the spot small, and keep the magnet far
   away or remove it.
-* **Step size.** `f_step_mhz` = 0.1 is fine; ≤ 0.3 MHz is needed.
+* **Step size.** ≤ 0.3 MHz is needed. The amplifier power sweep uses exactly 0.3 MHz (chosen
+  for the wide window), which is just enough. Use 0.1 MHz in a narrow window to look for the triplet.
 
 A quick diagnostic is the FWHM of a single line at the lowest usable MW power and laser power.
 If it stays above about 1.5 MHz, the triplet (and the centre/side test) is out of reach for this
 sample. `analysis/plot_power_sweep_dc.py` already fits a 2.16 MHz triplet and can be used to
 check.
 
-## 10. Parameters (`BASE`)
+## 10. Strain and electric fields in a dense sample (`fig7_strain`)
+
+A high-density sample does not have $E=0$. Charged defects (N⁺, NV⁻) produce local electric
+fields, and there is local strain. Both enter as the transverse term $E$, with a size and
+direction that vary from NV to NV [5]. With the eigenstate reference of Section 4 the
+coherent/incoherent comparison is valid at any $E$. The results below are at $B=0$ and
+$\Omega/2\pi = 1$ MHz.
+
+**(a) One ideal NV, fixed $E$.** The MW is linearly polarised at angle $\varphi$ to the strain axis.
+
+| $E$ (MHz) | 0.01 | 0.06 | 0.3 | 1.8 | 10 |
+|---|---|---|---|---|---|
+| $\varphi$ = 22.5° | −24.4 % | −23.4 % | −1.7 % | +2.7 % | 0.0 % |
+| $\varphi$ = 45° | −24.5 % | −22.8 % | −1.3 % | +1.9 % | +0.1 % |
+| $\varphi$ = 0 | 0 | 0 | 0 | 0 | 0 |
+
+* **Small $E$:** coherence changes the PL only while the strain splitting $2E$ is unresolved. In
+  practice that means $E \lesssim 0.3\,\Omega$, where the drive's dressing protects the bright/dark
+  structure, exactly as for the field spread in Figure 3a.
+* **Large $E$:** for $E \gg \Omega$ each strain eigenstate is an ordinary, separately resolved
+  two-level line.
+* **$\varphi = 0$:** the drive's bright state *is* a strain eigenstate. Coherent and incoherent
+  models then agree exactly (Section 4.1).
+
+**(b) Random $E$, as in an ensemble.** $E_x, E_y \sim N(0,\sigma_E^2)$, so both size and
+direction are random.
+
+| $\sigma_E$ (MHz rms per axis) | 0 | 0.03 | 0.1 | 0.3 | 1 | 3 |
+|---|---|---|---|---|---|---|
+| ideal single-NV dynamics | −24.6 % | −23.6 % | −18.7 % | −1.3 % | +3.6 % | 0.0 % |
+| dense ensemble (σ 0.5 MHz, ¹⁴N, $T_2$ 2 µs, ±1 cycling on) | +2.0 % | +2.1 % | +1.9 % | +1.1 % | +0.35 % | −0.1 % |
+
+A random $E$ acts as one more static inhomogeneity: each NV gets a different amount of
+bright↔dark mixing. For the dense ensemble the signature starts small. At $\sigma_E = 0$ it is
++2 %, and that comes mostly from the ¹⁴N effect of Section 9.1, not from degenerate coherence.
+Realistic $E$ then shrinks it to a few tenths of a percent of the ODMR peak. The full lineshape
+difference stays at 1–3 % of the peak, and Figure 4 shows a fitted rate model absorbs it into
+$\Omega$, $\sigma$ and $C_0$.
+
+Measured against the noise on this rig (≥ 8 % of the signal per averaged FM power-sweep point,
+SNR ≈ 10), these effects are one to two orders of magnitude too small to see in CW. Strain does
+not open a loophole; it closes it further. To estimate $E$ for this sample, take a zero-field ODMR
+spectrum without the magnet: the width of the central split/dip structure gives the $E$ scale.
+
+## 11. Parameters (`BASE`)
 
 | name | default | unit | meaning |
 |---|---|---|---|
@@ -381,6 +571,8 @@ check.
 | `hf`, `A` | False, −2.16 | –, MHz | include ¹⁴N classes; axial hyperfine |
 | `E` | 0.0 | MHz | transverse strain/electric splitting |
 | `phi` | 0.0 | rad | linear-MW angle to the strain axis (only matters if $E\neq0$) |
+| `sigma_E` | 0.0 | MHz | random $E$: rms of $E_x$, $E_y$; > 0 replaces `E` and `phi` |
+| `nqE`, `nphiE` | 10, 8 | – | quadrature nodes for $|E|$ and its direction |
 | `C0` | 0.3 | – | PL contrast of $\pm1$ vs 0 |
 | `pol` | `linear` | – | `linear`, `sigma+`, `sigma-` |
 | `nq` | 31 | – | Gauss–Hermite nodes |
@@ -409,3 +601,6 @@ Presets: `IDEAL_SINGLE` (σ=0, no hf, $T_2$=1 ms) and `ENSEMBLE` (σ=0.5 MHz, ¹
 17. J.-P. Tetienne et al., "Magnetic-field-dependent photodynamics of single NV defects in diamond", *New J. Phys.* **14**, 103033 (2012).
 18. L. Allen and J. H. Eberly, *Optical Resonance and Two-Level Atoms* (Wiley, 1975; Dover, 1987).
 19. A. Dréau et al., "Avoiding power broadening in optically detected magnetic resonance of single NV defects for enhanced dc magnetic field sensitivity", *Phys. Rev. B* **84**, 195204 (2011).
+20. M. W. Doherty et al., "Theory of the ground-state spin of the NV⁻ center in diamond", *Phys. Rev. B* **85**, 205203 (2012).
+21. F. Bloch and A. Siegert, "Magnetic resonance for nonrotating fields", *Phys. Rev.* **57**, 522 (1940).
+22. J. H. Shirley, "Solution of the Schrödinger equation with a Hamiltonian periodic in time", *Phys. Rev.* **138**, B979 (1965).
