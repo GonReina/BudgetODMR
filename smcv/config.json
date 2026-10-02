@@ -5,6 +5,11 @@
     "rp_ip": "169.254.129.123",
     "rp_port": 5000
   },
+  "mw_chain": {
+    "amp_in_chain": true,
+    "smcv_max_dbm_amp": -16.4,
+    "smcv_max_dbm_direct": 16.0
+  },
   "sweep": {
     "f_start_mhz": 2840.0,
     "f_stop_mhz": 2880.0,

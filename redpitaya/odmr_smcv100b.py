@@ -1,7 +1,7 @@
 """
 ODMR sweep driven by a Rohde & Schwarz SMCV100B vector signal generator.
 
-The microwaves now come from the SMCV100B (-> Pasternack PE8301 amp -> antenna)
+The microwaves now come from the SMCV100B (-> Pasternack PE8301 isolator -> ZHL-16W-43-S+ amp -> antenna)
 instead of the ADF4351. This script runs ON THE RED PITAYA: it reads the
 photodiode on fast-ADC IN1 locally, and controls the SMCV100B over LAN using
 raw SCPI on TCP port 5025 (no VISA / extra libraries needed). One script does
@@ -47,8 +47,10 @@ F_START_MHZ = 2800.0
 F_STOP_MHZ  = 2940.0
 F_STEP_MHZ  = 1.0
 
-POWER_DBM   = -10.0            # SMCV output level. KEEP within the PE8301 amp's safe
+POWER_DBM   = -20.0            # SMCV output level. KEEP within the ZHL-16W-43-S+ amp's safe
                                # input range -- start low and raise it deliberately.
+SMCV_MAX_DBM = -16.4           # amp linear limit (smcv/config.json mw_chain); +16.0 for
+                               # direct drive without the amplifier
 
 N_SWEEPS       = 20
 INTEGRATION_MS = 100.0         # built from 100 ms mains-clean blocks (see odmr_sweep_robust)
@@ -97,6 +99,10 @@ class SMCV100B:
         idn = self.query("*IDN?")
         print(f"Connected: {idn}")
         self.write("*CLS")
+        if power_dbm > SMCV_MAX_DBM + 1e-9:
+            raise SystemExit(f"REFUSED: {power_dbm:+.2f} dBm exceeds SMCV_MAX_DBM "
+                             f"({SMCV_MAX_DBM:+.2f} dBm, ZHL-16W-43-S+ linear limit).")
+        self.write(f":SOURce:POWer:LIMit:AMPLitude {SMCV_MAX_DBM:.2f}")
         self.write(":SOURce:FREQuency:MODE CW")
         self.write(f":SOURce:POWer:LEVel:IMMediate:AMPLitude {power_dbm:.2f}")
         self.opc()

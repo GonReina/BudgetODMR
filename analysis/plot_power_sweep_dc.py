@@ -44,6 +44,13 @@ If the amplifier saturates, the power at the antenna does not follow the power
 you set and you are fitting the amplifier, not the NV centres. A curved panel
 (b) is the tell.
 
+>>> NOISE FIGURE (noise_vs_power_dc.png) <<<
+Everything in % of the PL, so the axes read directly: signal = depth of the
+deepest fitted dip (the visible contrast, hyperfine components summed); noise =
+sweep-to-sweep scatter of PL_on/PL_off, pooled over all frequency points (see
+powersweep_common.sweep_noise), for one sweep and for the N-sweep average.
+Panel (b) shows noise as a % of the signal, i.e. 100/SNR.
+
 Run:  python plot_power_sweep_dc.py [data_dir]
 """
 
@@ -59,7 +66,8 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 
 from powersweep_common import (read_sweep, power_from_name, smooth,
-                               save_raw_plot, broadening_fit)
+                               save_raw_plot, broadening_fit, sweep_noise,
+                               save_noise_plot)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "smcv"))
@@ -255,6 +263,7 @@ def main():
         p = power_from_name(path)
         fr, sig, std, meta = read_sweep(path)
         n_avg = int(float(meta.get("n_avg", 1)))
+        chain_gain = float(meta.get("chain_gain_typ_dB", 0.0))
 
         if RAW_PLOTS:
             save_raw_plot(os.path.join(fig_dir, f"raw_{p:05.2f}dBm.png"),
@@ -269,8 +278,15 @@ def main():
         if FIT_HF and np.isfinite(res["a_hf"]):
             hf_vals.append(res["a_hf"])
 
+        # signal and noise in % of the PL baseline
+        x = fr[res["mask"]]
+        base = res["b"] + res["m"] * (x - x.mean())
+        depth = float(np.max(base - lorentz_dips(x, *res["popt"])))
+        s1, s_avg, noise_method = sweep_noise(sig, std, n_avg)
         row = dict(p=p, n_avg=n_avg, popt=res["popt"], mask=res["mask"],
-                   path=path)
+                   path=path, signal=100 * depth / res["b"],
+                   noise1=100 * s1 / res["b"], noise_avg=100 * s_avg / res["b"],
+                   noise_method=noise_method)
         parts, worst = [], 0.0
         for j, l in enumerate(res["lines"], start=1):
             prec = l["gerr"] / l["g"] if l["g"] else np.nan
@@ -375,6 +391,19 @@ def main():
     print(f"  N_AVG needed: median {int(np.ceil(np.nanmedian(nn)))}, "
           f"worst-case {int(np.ceil(np.nanmax(nn)))}")
 
+    noise_method = " + ".join(sorted({r["noise_method"] for r in rows}))
+    print(f"\nNOISE ({noise_method}); all in % of the PL")
+    print("  power    N  contrast  noise, 1 sweep  noise, averaged     SNR")
+    for r in rows:
+        print(f"  {r['p']:+5.1f}  {r['n_avg']:3d}  {r['signal']:7.3f} %  "
+              f"{r['noise1']:12.3f} %  {r['noise_avg']:13.3f} %  "
+              f"{r['signal']/r['noise_avg']:6.1f}")
+    save_noise_plot(os.path.join(in_dir, "noise_vs_power_dc.png"), powers,
+                    [r["signal"] for r in rows], [r["noise1"] for r in rows],
+                    [r["noise_avg"] for r in rows], [r["n_avg"] for r in rows],
+                    "% of PL", f"DC ODMR: how big is the noise? ({noise_method})",
+                    "signal (ODMR contrast, deepest dip)", chain_gain)
+
     ncol = 4 if N_LINES == 2 else 3
     fig, axes = plt.subplots(1, ncol, figsize=(4.8 * ncol, 4.2))
     ax1, ax2, ax3 = axes[0], axes[1], axes[2]
@@ -430,7 +459,8 @@ def main():
             cols += (f",f0_{j}_MHz,fwhm_{j}_MHz,fwhm_err_{j}_MHz,"
                      f"contrast_{j}_pct")
         cols += ",splitting_MHz" if N_LINES == 2 else ""
-        f.write(cols + ",n_avg_used,n_avg_needed\n")
+        f.write(cols + ",n_avg_used,n_avg_needed,signal_pct,noise_1sweep_pct,"
+                       "noise_avg_pct,snr\n")
         for r in rows:
             line = f"{r['p']:.2f},{10**(r['p']/10):.5f}"
             for j in range(1, N_LINES + 1):
@@ -438,7 +468,9 @@ def main():
                          f"{r[f'e{j}']:.5f},{r[f'c{j}']:.4f}")
             if N_LINES == 2:
                 line += f",{r['split']:.5f}"
-            line += f",{r['n_avg']},{r['n_need']:.1f}"
+            line += (f",{r['n_avg']},{r['n_need']:.1f},{r['signal']:.5f},"
+                     f"{r['noise1']:.5f},{r['noise_avg']:.5f},"
+                     f"{r['signal']/r['noise_avg']:.2f}")
             f.write(line + "\n")
 
     print("\nIf panel (b) is NOT a straight line, suspect amplifier compression "

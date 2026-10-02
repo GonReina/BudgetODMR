@@ -45,11 +45,13 @@ inflated by the modulation. That is why the unmodulated companion
 (odmr_power_sweep_dc_pc.py) exists: slower and noisier, but free of modulation
 broadening. Trust DC for Gamma_0, FM for the high-power end.
 
->>> IF YOU RECONNECT THE AMPLIFIER <<<
-With a power amplifier in the chain, compression means the power at the antenna
-stops following the power you set, and the broadening fit becomes a fit to the
-amplifier's compression curve. Characterise it first and cap POW_STOP at its
-linear limit. Driving direct from the SMCV, as here, this does not apply.
+>>> AMPLIFIER <<<
+Set mw_chain.amp_in_chain in config.json to match the hardware. With the amplifier
+(SMCV -> PE8301 isolator -> ZHL-16W-43-S+ -> antenna) the power grid moves to
+POW_RANGE = -45..-16.5 dBm on the SMCV, and check_power_range() refuses to run
+anything above the amplifier's linear limit (-16.4 dBm) or its +9 dBm damage
+limit. Compression would make the broadening fit a fit to the amplifier, so
+measure the real gain/P1dB before relaxing the limit.
 
 Run on the PC:  python odmr_power_sweep_fm_pc.py
 """
@@ -70,14 +72,13 @@ from lockin_common import (
 )
 from powersweep_acq import (
     power_list, n_avg_for, count_existing, save_single_sweep, write_combined,
-    print_plan, AVG_SCHEDULE,
+    print_plan, AVG_SCHEDULE, POW_RANGE, check_power_range, chain_header,
 )
 
 # ============================================================================
 # SETTINGS
 # ============================================================================
-POW_START = -15.0    # dBm
-POW_STOP  = 16.0     # dBm  (SMCV standard max ~ +16 dBm)
+POW_START, POW_STOP = POW_RANGE   # SMCV dBm; set by config mw_chain.amp_in_chain
 POW_STEP  = 0.5      # dB
 
 # N_AVG per power band lives in powersweep_acq.AVG_SCHEDULE -- edit it there.
@@ -91,8 +92,7 @@ SMCV_MAX_DBM = 16.0
 
 def set_power_dbm(src, dbm):
     """Set the SMCV CW output level (SMCV100B.configure only sets it once)."""
-    src.s.write(f":SOURce:POWer:LEVel:IMMediate:AMPLitude {dbm:.2f}")
-    src.s.query("*OPC?")
+    src.set_power_dbm(dbm)
 
 
 def sweep_once(src, rp, freqs):
@@ -110,6 +110,7 @@ def main():
     if max(powers) > SMCV_MAX_DBM:
         raise SystemExit(f"POW_STOP {POW_STOP} dBm exceeds the SMCV limit "
                          f"({SMCV_MAX_DBM} dBm). Lower POW_STOP.")
+    check_power_range(powers)
 
     freqs = list(frange(F_START, F_STOP, F_STEP))
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -124,7 +125,8 @@ def main():
 
     header = [f"FM lock-in power sweep, {datetime.now().isoformat(timespec='seconds')}",
               f"f_mod_Hz={F_MOD:.0f} fm_deviation_MHz={FM_DEV_HZ/1e6:.4f} "
-              f"signal=lockin_R"]
+              f"signal=lockin_R",
+              chain_header()]
 
     src = SMCV100B(SMCV_IP, SMCV_PORT)
     src.configure(powers[0])

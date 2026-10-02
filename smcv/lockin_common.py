@@ -133,12 +133,9 @@ def setup_smcv_modulation(src, mode):
     the signal, so the LF frequency you dial in only needs to be roughly in the
     1-10 kHz range -- it need not equal config f_mod_hz exactly."""
     if mode == "am":
-        pep = POWER_DBM + 20 * np.log10(1 + AM_DEPTH / 100.0)
-        if pep > 16.3:      # SMCV standard max ~+16 dBm (+25 with K31)
-            safe = 16.0 - 20 * np.log10(1 + AM_DEPTH / 100.0)
-            print(f"  WARNING: AM PEP ~{pep:.1f} dBm exceeds the SMCV max (~+16 dBm) at "
-                  f"carrier {POWER_DBM:+.1f} dBm / depth {AM_DEPTH:.0f}%. Lower "
-                  f"sweep.power_dbm to <= {safe:+.1f} dBm or reduce lockin.am_depth_pct.")
+        # AM peaks reach carrier * (1 + depth): refuse if the PEAK exceeds the
+        # chain limit (the amplifier's linear limit when it is connected).
+        src.set_power_dbm(POWER_DBM, headroom_db=20 * np.log10(1 + AM_DEPTH / 100.0))
 
     print(f"  >> Configure {mode.upper()} ONCE on the SMCV (Modulation menu):")
     if mode == "am":

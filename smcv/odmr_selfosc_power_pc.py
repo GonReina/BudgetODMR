@@ -76,8 +76,7 @@ def main():
             tag = f"selfosc_power_{P:+.0f}dBm".replace("+", "p").replace("-", "m")
             out_dir = os.path.join(DATA_DIR, tag)
             print(f"\n=== MW power {P:+.1f} dBm ===")
-            src.s.write(f":SOURce:POWer:LEVel:IMMediate:AMPLitude {P:.2f}")
-            src.s.query("*OPC?")
+            src.set_power_dbm(P)
             time.sleep(1.0)
 
             R_spec = take_spectrum(src, rp, freqs)

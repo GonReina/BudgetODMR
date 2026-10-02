@@ -45,6 +45,13 @@ precision, using sigma(Gamma) ~ 1/sqrt(N):
 
 Run once at N_AVG = 1, read the number, set N_AVG.
 
+Noise figure (noise_vs_power_fm.png)
+------------------------------------
+Signal = height of the fitted lock-in curve (max - min of the fit). Noise =
+sweep-to-sweep scatter of the lock-in R, pooled over all frequency points (see
+powersweep_common.sweep_noise), for one sweep and for the N-sweep average.
+Panel (b) shows noise as a % of the signal, i.e. 100/SNR.
+
 >>> WINDOW WIDTH <<<
 A Lorentzian fit needs baseline on both sides: aim for +/- 3*Gamma_max beyond
 the outermost line. The script warns when the window is too tight.
@@ -70,7 +77,8 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 
 from powersweep_common import (read_sweep, power_from_name, smooth,
-                               save_raw_plot, broadening_fit)
+                               save_raw_plot, broadening_fit, sweep_noise,
+                               save_noise_plot)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "smcv"))
@@ -277,6 +285,7 @@ def main():
         p = power_from_name(path)
         fr, sig, std, meta = read_sweep(path)
         n_avg = int(float(meta.get("n_avg", 1)))
+        chain_gain = float(meta.get("chain_gain_typ_dB", 0.0))
 
         if RAW_PLOTS:
             save_raw_plot(os.path.join(fig_dir, f"raw_{p:05.2f}dBm.png"),
@@ -297,9 +306,12 @@ def main():
         lo_l = np.hypot(c - LOBE_PEAK * amp_tot, floor)
         asym = (hi_l - lo_l) / (hi_l + lo_l) if (hi_l + lo_l) else 0.0
 
+        s1, s_avg, noise_method = sweep_noise(sig, std, n_avg)
+        model = dlorentz_fm(fr[res["mask"]], *res["popt"])
         row = dict(p=p, n_avg=n_avg, floor=floor, c=c, asym=asym,
                    popt=res["popt"], mask=res["mask"], path=path,
-                   peak=float(np.max(sig)))
+                   peak=float(np.max(sig)), signal=float(np.ptp(model)),
+                   noise1=s1, noise_avg=s_avg, noise_method=noise_method)
         parts = []
         worst_prec = 0.0
         for j, l in enumerate(res["lines"], start=1):
@@ -427,6 +439,23 @@ def main():
         print("  also SHIFTS THE NULL off line centre -- check any code that")
         print("  assumes the FM null marks f0 (odmr_fieldlock_fm_pc.py).")
 
+    # ---- noise / SNR
+    sig_amp = np.array([r["signal"] for r in rows])
+    noise_method = " + ".join(sorted({r["noise_method"] for r in rows}))
+    print(f"\nNOISE ({noise_method}); signal = height of the fitted lock-in curve")
+    print("  power    N  signal[uV]  noise, 1 sweep  noise, averaged     SNR")
+    for r in rows:
+        print(f"  {r['p']:+5.1f}  {r['n_avg']:3d}  {1e6*r['signal']:10.2f}  "
+              f"{100*r['noise1']/r['signal']:12.1f} %  "
+              f"{100*r['noise_avg']/r['signal']:13.1f} %  "
+              f"{r['signal']/r['noise_avg']:6.1f}")
+    save_noise_plot(os.path.join(in_dir, "noise_vs_power_fm.png"), powers,
+                    1e6 * sig_amp, [1e6 * r["noise1"] for r in rows],
+                    [1e6 * r["noise_avg"] for r in rows],
+                    [r["n_avg"] for r in rows], "uV, lock-in R",
+                    f"FM lock-in ODMR: how big is the noise? ({noise_method})",
+                    "signal (height of fitted curve)", chain_gain)
+
     # ---- summary figure
     ncol = 4 if N_LINES == 2 else 3
     fig, axes = plt.subplots(1, ncol, figsize=(4.8 * ncol, 4.2))
@@ -484,7 +513,8 @@ def main():
         for j in range(1, N_LINES + 1):
             cols += f",f0_{j}_MHz,fwhm_{j}_MHz,fwhm_err_{j}_MHz"
         cols += ",splitting_MHz" if N_LINES == 2 else ""
-        f.write(cols + ",asymmetry,peak_R_V,n_avg_used,n_avg_needed\n")
+        f.write(cols + ",asymmetry,peak_R_V,n_avg_used,n_avg_needed,"
+                       "signal_V,noise_1sweep_V,noise_avg_V,snr\n")
         for r in rows:
             line = f"{r['p']:.2f},{10**(r['p']/10):.5f}"
             for j in range(1, N_LINES + 1):
@@ -492,7 +522,8 @@ def main():
             if N_LINES == 2:
                 line += f",{r['split']:.5f}"
             line += (f",{r['asym']:.5f},{r['peak']:.8e},{r['n_avg']},"
-                     f"{r['n_need']:.1f}")
+                     f"{r['n_need']:.1f},{r['signal']:.6e},{r['noise1']:.6e},"
+                     f"{r['noise_avg']:.6e},{r['signal']/r['noise_avg']:.2f}")
             f.write(line + "\n")
 
     print("\nIf panel (b) is NOT a straight line, suspect amplifier compression "

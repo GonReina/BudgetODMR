@@ -28,16 +28,91 @@ import os
 
 import numpy as np
 
+from expconfig import load_config
+
+# ---------------------------------------------------------------------------
+# MW chain.  All powers in this module and the sweep scripts are what is SET ON
+# THE SMCV, not what reaches the antenna.
+#
+#   config.json mw_chain.amp_in_chain = false:  SMCV100B -> antenna
+#   config.json mw_chain.amp_in_chain = true:   SMCV100B -> Pasternack PE8301 isolator -> Mini-Circuits
+#                          ZHL-16W-43-S+ -> antenna
+#
+# PE8301: isolator, 2-4 GHz, 1 W forward/reverse, 0.6 dB insertion loss. It is
+#   rated for 1 W, so it must stay BEFORE the amplifier, never after it.
+# ZHL-16W-43-S+ (datasheet rev. D): gain 40/45/50 dB min/typ/max, P1dB >= +39 dBm
+#   (typ +41), Psat +42 dBm, ABSOLUTE MAX INPUT +9 dBm, survives open/short
+#   output at full CW power.
+#
+# Linear region: stay LINEAR_BACKOFF_DB below the WORST-CASE P1dB with the
+# WORST-CASE gain, i.e. SMCV <= 39 - 6 - 50 + 0.6 = -16.4 dBm. With the typical
+# 45 dB gain that is about +28 dBm (0.7 W) at the antenna. Measure the real gain
+# and compression (30 dB attenuator + power detector, see procurement/) and then
+# relax these numbers if you want more power.
+# ---------------------------------------------------------------------------
+_mw = load_config()["mw_chain"]
+AMP_IN_CHAIN = _mw["amp_in_chain"]           # edit config.json, not this file
+ISOLATOR_LOSS_DB = 0.6
+AMP_GAIN_MAX_DB = 50.0
+AMP_GAIN_TYP_DB = 45.0
+AMP_P1DB_MIN_DBM = 39.0
+AMP_MAX_IN_DBM = 9.0          # damage limit at the amplifier input
+LINEAR_BACKOFF_DB = 6.0
+
+# = AMP_P1DB_MIN_DBM - LINEAR_BACKOFF_DB - AMP_GAIN_MAX_DB + ISOLATOR_LOSS_DB
+#   = -16.4 dBm. The number itself lives in config.json mw_chain.smcv_max_dbm_amp
+#   so that the SMCV100B class enforces the same limit for every script.
+SMCV_MAX_LINEAR_DBM = _mw["smcv_max_dbm_amp"]
+
+# Power grid (SMCV dBm) per chain. With the amplifier, -45 dBm gives about 0 dBm
+# at the antenna, so the low end overlaps the high end of the direct-drive
+# sweeps -- a built-in cross-check of the amplifier gain.
+POW_RANGE = (-45.0, -16.5) if AMP_IN_CHAIN else (-15.0, 16.0)
+
+
+def chain_header():
+    """Metadata line for the CSV header (space-separated key=value tokens).
+
+    power_dBm in the files is always the SMCV setting; the typical power at the
+    antenna is power_dBm + chain_gain_typ_dB.
+    """
+    if not AMP_IN_CHAIN:
+        return "chain=SMCV-antenna chain_gain_typ_dB=0.0"
+    return (f"chain=SMCV-PE8301-ZHL16W43-antenna "
+            f"chain_gain_typ_dB={AMP_GAIN_TYP_DB - ISOLATOR_LOSS_DB:.1f}")
+
+
+def check_power_range(powers):
+    """Refuse to run a power grid that would damage or compress the amplifier."""
+    if not AMP_IN_CHAIN:
+        return
+    p_max = max(powers)
+    if p_max - ISOLATOR_LOSS_DB > AMP_MAX_IN_DBM:
+        raise SystemExit(f"{p_max:+.1f} dBm on the SMCV exceeds the ZHL-16W-43-S+ "
+                         f"ABSOLUTE MAXIMUM input ({AMP_MAX_IN_DBM:+.0f} dBm). "
+                         f"This can destroy the amplifier.")
+    if p_max > SMCV_MAX_LINEAR_DBM:
+        raise SystemExit(f"{p_max:+.1f} dBm on the SMCV may compress the amplifier "
+                         f"(linear limit {SMCV_MAX_LINEAR_DBM:+.1f} dBm, see "
+                         f"powersweep_acq). Lower the top of the power range, or "
+                         f"relax the limit after measuring the real P1dB.")
+
+
 # ---------------------------------------------------------------------------
 # Tiered averaging: (p_lo_dBm, p_hi_dBm, n_avg), inclusive bounds.
 # More averaging where the signal is weakest.
 # ---------------------------------------------------------------------------
-AVG_SCHEDULE = (
+AVG_SCHEDULE_DIRECT = (
     (-15.0, -6.5, 4),
     (-6.0,   1.5, 2),
     (2.0,    9.5,  2),
     (10.0,  16.0,  2),
 )
+AVG_SCHEDULE_AMP = (
+    (-45.0, -36.5, 4),        # ~0 to +8 dBm at the antenna: weakest signal
+    (-36.0, -16.5, 2),
+)
+AVG_SCHEDULE = AVG_SCHEDULE_AMP if AMP_IN_CHAIN else AVG_SCHEDULE_DIRECT
 AVG_DEFAULT = 8
 
 # Order in which powers are visited. "desc" (high power first) is the sane

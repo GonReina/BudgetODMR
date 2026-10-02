@@ -35,11 +35,13 @@ exact sweep it left off. Raising a tier in AVG_SCHEDULE and re-running simply
 tops up the powers that are now short. The individual sweeps are kept under
 sweeps/<power>/ so you can check afterwards for drift across a multi-day run.
 
->>> IF YOU RECONNECT THE AMPLIFIER <<<
-With a power amplifier in the chain, compression means the power at the antenna
-stops following the power you set, and the broadening fit becomes a fit to the
-amplifier's compression curve. Characterise it first and cap POW_STOP at its
-linear limit. Driving direct from the SMCV, as here, this does not apply.
+>>> AMPLIFIER <<<
+Set mw_chain.amp_in_chain in config.json to match the hardware. With the amplifier
+(SMCV -> PE8301 isolator -> ZHL-16W-43-S+ -> antenna) the power grid moves to
+POW_RANGE = -45..-16.5 dBm on the SMCV, and check_power_range() refuses to run
+anything above the amplifier's linear limit (-16.4 dBm) or its +9 dBm damage
+limit. Compression would make the broadening fit a fit to the amplifier, so
+measure the real gain/P1dB before relaxing the limit.
 
 Run on the PC:  python odmr_power_sweep_dc_pc.py
 """
@@ -59,14 +61,13 @@ from odmr_smcv100b_pc import (
 )
 from powersweep_acq import (
     power_list, n_avg_for, count_existing, save_single_sweep, write_combined,
-    print_plan, AVG_SCHEDULE,
+    print_plan, AVG_SCHEDULE, POW_RANGE, check_power_range, chain_header,
 )
 
 # ============================================================================
 # SETTINGS
 # ============================================================================
-POW_START = -15.0    # dBm
-POW_STOP  = 16.0     # dBm
+POW_START, POW_STOP = POW_RANGE   # SMCV dBm; set by config mw_chain.amp_in_chain
 POW_STEP  = 0.5      # dB
 
 # N_AVG per power band lives in powersweep_acq.AVG_SCHEDULE -- edit it there.
@@ -79,8 +80,7 @@ SMCV_MAX_DBM = 16.0
 
 
 def set_power_dbm(src, dbm):
-    src.s.write(f":SOURce:POWer:LEVel:IMMediate:AMPLitude {dbm:.2f}")
-    src.s.query("*OPC?")
+    src.set_power_dbm(dbm)
 
 
 def measure_point(src, adc, freq_mhz):
@@ -109,6 +109,7 @@ def main():
     if max(powers) > SMCV_MAX_DBM:
         raise SystemExit(f"POW_STOP {POW_STOP} dBm exceeds the SMCV limit "
                          f"({SMCV_MAX_DBM} dBm). Lower POW_STOP.")
+    check_power_range(powers)
 
     freqs = list(frange(F_START_MHZ, F_STOP_MHZ, F_STEP_MHZ))
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -127,7 +128,8 @@ def main():
     header = [f"DC (unmodulated) power sweep, "
               f"{datetime.now().isoformat(timespec='seconds')}",
               f"integrate_ms={integ_ms:.1f} mw_on_off={MW_ON_OFF} "
-              f"signal={'PL_on/PL_off' if MW_ON_OFF else 'mean_V'}"]
+              f"signal={'PL_on/PL_off' if MW_ON_OFF else 'mean_V'}",
+              chain_header()]
 
     src = SMCV100B(SMCV_IP, SMCV_PORT)
     adc = RedPitayaADC(RP_IP, RP_PORT)

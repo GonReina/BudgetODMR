@@ -7,7 +7,8 @@ built-in Ethernet plus a USB-Ethernet adapter). The PC opens two SCPI sockets:
     PC --SCPI 5025--> R&S SMCV100B        (sets MW frequency / power / output)
     PC --SCPI 5000--> Red Pitaya server   (reads photodiode on fast-ADC IN1)
 
-Microwave chain: SMCV100B -> Pasternack PE8301 amp -> antenna.
+Microwave chain: SMCV100B -> Pasternack PE8301 isolator -> Mini-Circuits
+ZHL-16W-43-S+ amp (45 dB, input <= +9 dBm absolute max) -> antenna.
 Detector: PDA10A2 (or similar) -> Red Pitaya IN1.
 
 PREREQUISITE on the Red Pitaya (once): start its SCPI server -- open the Red
@@ -51,6 +52,12 @@ N_SWEEPS       = _s["n_sweeps"]
 INTEGRATION_MS = _s["integration_ms"]
 SETTLE_S       = _s["settle_s"]
 MW_ON_OFF      = _s["mw_on_off"]
+
+# Highest level the SMCV may be SET to (config mw_chain; derived in expconfig).
+# With the ZHL-16W-43-S+ in the chain anything above this compresses the
+# amplifier, and above +9 dBm at its input it can be destroyed.
+AMP_IN_CHAIN = _cfg["mw_chain"]["amp_in_chain"]
+SMCV_MAX_DBM = _cfg["mw_chain"]["smcv_max_dbm"]
 
 DATA_DIR = _p["data_dir"]
 RUNS_DIR = os.path.join(DATA_DIR, _p["runs_subdir"])
@@ -99,13 +106,49 @@ class Scpi:
 # SMCV100B (SCPI, '\n' terminated)
 # ============================================================================
 class SMCV100B:
-    def __init__(self, ip, port):
+    """SMCV100B over SCPI. ALL level changes must go through set_power_dbm(),
+    which refuses anything above SMCV_MAX_DBM before it reaches the instrument."""
+
+    def __init__(self, ip, port, max_dbm=SMCV_MAX_DBM):
         self.s = Scpi(ip, port, term="\n")
+        self.max_dbm = max_dbm
 
     def configure(self, power_dbm):
         print(f"SMCV100B: {self.s.query('*IDN?')}")
         self.s.write("*CLS")
+        self.set_level_limit()
         self.s.write(":SOURce:FREQuency:MODE CW")
+        self.set_power_dbm(power_dbm)
+
+    def set_level_limit(self):
+        """Also cap the level in the instrument itself, so the front panel and
+        other software cannot exceed it either. Best effort: if the firmware
+        rejects the command, the software check in set_power_dbm() still holds."""
+        try:
+            self.s.write(f":SOURce:POWer:LIMit:AMPLitude {self.max_dbm:.2f}")
+            got = float(self.s.query(":SOURce:POWer:LIMit:AMPLitude?"))
+            ok = abs(got - self.max_dbm) < 0.05
+        except Exception:
+            got, ok = None, False
+        chain = "amplifier chain" if AMP_IN_CHAIN else "direct drive"
+        if ok:
+            print(f"  level limit set in the SMCV: {got:+.2f} dBm ({chain})")
+        else:
+            print(f"  WARNING: could not set the SMCV level limit (read back {got}). "
+                  f"The software limit {self.max_dbm:+.2f} dBm still applies; also "
+                  f"set Level > Limit on the front panel to be safe.")
+
+    def set_power_dbm(self, power_dbm, headroom_db=0.0):
+        """Set the carrier level. headroom_db: extra peak power on top of the
+        carrier that must also fit under the limit (e.g. the AM peak)."""
+        if power_dbm + headroom_db > self.max_dbm + 1e-9:
+            chain = ("ZHL-16W-43-S+ linear limit" if AMP_IN_CHAIN
+                     else "SMCV maximum")
+            peak = f" (+{headroom_db:.1f} dB AM peak)" if headroom_db else ""
+            raise SystemExit(
+                f"REFUSED: {power_dbm:+.2f} dBm{peak} exceeds {self.max_dbm:+.2f} dBm "
+                f"({chain}; config.json mw_chain). Lower the power, e.g. "
+                f"sweep.power_dbm in config.json.")
         self.s.write(f":SOURce:POWer:LEVel:IMMediate:AMPLitude {power_dbm:.2f}")
         self.s.query("*OPC?")
 

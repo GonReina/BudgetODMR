@@ -14,12 +14,17 @@ microwave frequency f (all frequencies in MHz, times in us):
             + (Omega/2) (c+ |+1><0| + c- |-1><0| + h.c.)
 
     df = f - D, delta = gamma*B_par (+ A_hf * m_I), E = transverse strain/electric term.
-    Linear MW polarisation: c+ = c- = 1 (Omega = Rabi frequency of EACH transition);
-    circular sigma+ at the same power: c+ = sqrt2, c- = 0.
+    Linear MW polarisation at angle phi to the strain (E) axis: c+ = exp(-i phi),
+    c- = exp(+i phi) (Omega = Rabi frequency of EACH transition); circular sigma+ at the
+    same power: c+ = sqrt2, c- = 0. phi only matters when E != 0: phi = 0 drives the
+    upper strain eigenstate (|+1>+|-1>)/sqrt2 at D+E, phi = 90 deg the lower one at D-E.
 
 Laser and relaxation as Lindblad operators (rates in 1/us):
     sqrt(gamma_p) |0><+-1|   optical repolarisation into ms=0 (via the singlet)
     sqrt(gamma_exc) |0><0|   optical cycling of ms=0: dephases 0 vs +-1 coherences
+    sqrt(gamma_exc_pm) (|+1><+1| + |-1><-1|)
+                             optical cycling of ms=+-1 (spin-conserving): dephases 0 vs +-1
+                             coherences but NOT the +1/-1 coherence (default 0 = off)
     sqrt(2/T2) Sz            magnetic noise: SQ coherences decay at 1/T2, the DQ
                              (+1,-1) coherence at 4/T2
 PL = p0 + (1 - C0)(p+1 + p-1)   (the readout is diagonal: it never sees rho_{+1,-1}).
@@ -51,7 +56,9 @@ fig5_time_domain   what does work: Rabi frequency sqrt2 larger at degeneracy, an
 ASSUMPTIONS (edit below): rates are order-of-magnitude values for moderate laser power,
 not measured for this rig; PL contrast C0 only scales the signals; optical cycling is
 assumed NOT to destroy the +1/-1 coherence (the most favourable case for coherence);
-transverse field components, the excited state and NV0 are not modelled.
+transverse field components, the excited state and NV0 are not modelled. The
+incoherent reference ignores E, so the coherent/incoherent comparison is only
+meaningful for E = 0 (the default everywhere below).
 """
 
 import os
@@ -72,12 +79,14 @@ OUT = os.path.join(HERE, "vsystem_sim_out")
 BASE = dict(
     Omega=1.0,        # single-transition Rabi frequency Omega/2pi with linear MW (MHz)
     gamma_p=0.2,      # optical repolarisation rate ms=+-1 -> 0 (1/us)
-    gamma_exc=1.0,    # optical cycling rate (1/us)
+    gamma_exc=1.0,    # optical cycling rate of ms=0 (1/us)
+    gamma_exc_pm=0.0, # optical cycling rate of ms=+-1 (1/us); physically ~gamma_exc, 0 = off
     T2=2.0,           # homogeneous SQ dephasing time (us)
     sigma=0.0,        # inhomogeneous rms spread of gamma*B_par (MHz)
     hf=False,         # include 14N hyperfine classes
     A=-2.16,          # 14N axial hyperfine (MHz)
     E=0.0,            # transverse strain/electric term (MHz)
+    phi=0.0,          # linear-MW polarisation angle to the strain axis (rad); only matters if E != 0
     C0=0.3,           # PL contrast ms=+-1 vs 0
     pol="linear",
     nq=31,            # quadrature points over the Gaussian spread
@@ -113,7 +122,8 @@ def dissipator(p, laser=True):
     Ls = [np.sqrt(2.0 / p["T2"]) * SZ]
     if laser:
         Ls += [np.sqrt(p["gamma_p"]) * op(1, 0), np.sqrt(p["gamma_p"]) * op(1, 2),
-               np.sqrt(p["gamma_exc"]) * op(1, 1)]
+               np.sqrt(p["gamma_exc"]) * op(1, 1),
+               np.sqrt(p["gamma_exc_pm"]) * (op(0, 0) + op(2, 2))]
     D = np.zeros((9, 9), complex)
     for L in Ls:
         LdL = L.conj().T @ L
@@ -122,7 +132,7 @@ def dissipator(p, laser=True):
 
 
 def gamma2(p):
-    return 0.5 * (p["gamma_p"] + p["gamma_exc"] + 2.0 / p["T2"])
+    return 0.5 * (p["gamma_p"] + p["gamma_exc"] + p["gamma_exc_pm"] + 2.0 / p["T2"])
 
 
 def ensemble(p, delta0):
@@ -145,8 +155,11 @@ def hamiltonian(df, d, p):
     H[..., 0, 0] = Dl - F
     H[..., 2, 2] = -Dl - F
     H[..., 0, 2] = H[..., 2, 0] = p["E"]
-    H[..., 0, 1] = H[..., 1, 0] = 0.5 * p["Omega"] * cp
-    H[..., 2, 1] = H[..., 1, 2] = 0.5 * p["Omega"] * cm
+    # <+-1| (cos(phi) Sx + sin(phi) Sy) |0> = exp(-+i phi)/sqrt2: in-plane MW angle -> relative phase
+    vp = 0.5 * p["Omega"] * cp * np.exp(-1j * p["phi"])
+    vm = 0.5 * p["Omega"] * cm * np.exp(1j * p["phi"])
+    H[..., 0, 1], H[..., 1, 0] = vp, np.conj(vp)
+    H[..., 2, 1], H[..., 1, 2] = vm, np.conj(vm)
     return TWO_PI * H
 
 
