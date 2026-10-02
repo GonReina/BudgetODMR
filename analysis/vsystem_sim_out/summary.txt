@@ -27,4 +27,4 @@ Time domain (no laser during MW):
   Ideal single NV (no dephasing): Rabi frequency degenerate/isolated = 1.41/1.00 MHz (ratio 1.41, sqrt2 = 1.41)
   DNVB14-like ensemble (sigma 0.5 MHz, 14N, T2 2 us): Rabi frequency degenerate/isolated = 1.44/1.01 MHz (ratio 1.42, sqrt2 = 1.41)
 
-(run time 5 s; figures in C:\Users\Gonzalo\Downloads\BudgetODMR\analysis\vsystem_sim_out)
+(run time 5 s; figures in c:\Users\Gonzalo\Downloads\BudgetODMR\analysis\vsystem_sim_out)

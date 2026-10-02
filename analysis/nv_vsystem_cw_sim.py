@@ -423,6 +423,40 @@ def main():
     with open(os.path.join(OUT, "summary.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
+    
+    # ---- figure 6: PL spectra vs Rabi frequency, coherent vs incoherent ----------------------
+    oms = [0.1, 0.3, 1.0, 3.0]
+    cols = ["C0", "C2", "C1", "C3"]
+    fig, axs = plt.subplots(2, 2, figsize=(12, 7.5), sharex="col")
+    say("\nPL spectra vs Rabi frequency: minimum PL (normalised to MW off), coherent / incoherent:")
+    for r, (name, base) in enumerate(scen):
+        for c, d0 in enumerate([0.5, 0.0]):
+            ax = axs[r, c]
+            s = span(P(**{**base, "Omega": max(oms)}), d0)
+            df = np.linspace(-s, s, 501)
+            msg = []
+            for om, col in zip(oms, cols):
+                p = P(**{**base, "Omega": om})
+                pl_c = 1 - contrast_coherent(df, d0, p)
+                pl_i = 1 - contrast_incoherent(df, d0, p)
+                ax.plot(df, pl_c, color=col, lw=1.4, label=f"$\\Omega/2\\pi$ = {om} MHz, coherent")
+                ax.plot(df, pl_i, color=col, lw=1.1, ls="--", label=f"$\\Omega/2\\pi$ = {om} MHz, incoherent")
+                msg.append(f"{om}: {pl_c.min():.3f}/{pl_i.min():.3f}")
+            say(f"  {name}, gamma*B = {d0} MHz -> " + "  ".join(msg))
+            ax.set_title(f"{name}\n$\\gamma B_\\parallel$ = {d0} MHz "
+                         f"({'lines degenerate' if d0 == 0 else 'lines overlapping'})", fontsize=8.5)
+            ax.set_ylabel("PL / PL(MW off)")
+            ax.grid(alpha=0.3)
+            if r == 1:
+                ax.set_xlabel("f - D (MHz)")
+    h, lab = axs[0, 0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=4, fontsize=7.5)
+    fig.suptitle("Photoluminescence spectra for increasing MW power: solid = coherent (Lindblad), "
+                 "dashed = incoherent (rate model)", fontsize=10)
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.savefig(os.path.join(OUT, "fig6_pl_vs_rabi.png"), dpi=150)
+    plt.close(fig)
+
 
 if __name__ == "__main__":
     main()
