@@ -104,13 +104,13 @@ def check_power_range(powers):
 # ---------------------------------------------------------------------------
 AVG_SCHEDULE_DIRECT = (
     (-15.0, -6.5, 4),
-    (-6.0,   1.5, 2),
-    (2.0,    9.5,  2),
-    (10.0,  16.0,  2),
+    (-6.0,   1.5, 4),
+    (2.0,    9.5,  4),
+    (10.0,  16.0,  4),
 )
 AVG_SCHEDULE_AMP = (
     (-45.0, -36.5, 4),        # ~0 to +8 dBm at the antenna: weakest signal
-    (-36.0, -16.5, 2),
+    (-36.0, -16.5, 4),
 )
 AVG_SCHEDULE = AVG_SCHEDULE_AMP if AMP_IN_CHAIN else AVG_SCHEDULE_DIRECT
 AVG_DEFAULT = 8

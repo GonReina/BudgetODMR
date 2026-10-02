@@ -134,6 +134,10 @@ def main():
     src = SMCV100B(SMCV_IP, SMCV_PORT)
     adc = RedPitayaADC(RP_IP, RP_PORT)
     src.configure(powers[0])
+    # DC means unmodulated: switch off any AM/FM left enabled in the SMCV
+    # Modulation menu (e.g. set up in advance for the FM sweep that follows).
+    src.s.write(":SOURce:MODulation:ALL:STATe OFF")
+    src.s.query("*OPC?")
     src.output(True)
 
     t0 = time.time()
@@ -158,6 +162,8 @@ def main():
     except KeyboardInterrupt:
         print(f"\nStopped after {taken} sweep(s) this session. "
               f"Re-run to resume exactly where it left off.")
+        # non-zero exit so a chained "dc && fm" does not start the FM sweep
+        raise SystemExit(1)
     finally:
         adc.close()
         src.close()

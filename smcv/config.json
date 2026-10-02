@@ -11,9 +11,9 @@
     "smcv_max_dbm_direct": 16.0
   },
   "sweep": {
-    "f_start_mhz": 2840.0,
-    "f_stop_mhz": 2880.0,
-    "f_step_mhz": 0.1,
+    "f_start_mhz": 2800.0,
+    "f_stop_mhz": 2932.0,
+    "f_step_mhz": 0.3,
     "power_dbm": 16.0,
     "n_sweeps": 5,
     "integration_ms": 100.0,
@@ -27,13 +27,13 @@
     "subread_ms": 100.0
   },
   "paths": {
-    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\21-09-2026",
+    "data_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\02-10-2026",
     "runs_subdir": "new_setup",
     "avg_file": "odmr_average.csv"
   },
   "magnet": {
     "n_sweeps_per_pos": 4,
-    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\21-07-2026\\magnet_fm_sweep",
+    "out_dir": "C:\\Users\\qute\\Downloads\\rsattempt\\02-10-2026\\magnet_fm_sweep",
     "position_units": "cm"
   },
   "analysis": {

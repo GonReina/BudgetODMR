@@ -154,6 +154,7 @@ def main():
     except KeyboardInterrupt:
         print(f"\nStopped after {taken} sweep(s) this session. "
               f"Re-run to resume exactly where it left off.")
+        raise SystemExit(1)
     finally:
         rp.close()
         teardown_smcv_modulation(src, "fm")
