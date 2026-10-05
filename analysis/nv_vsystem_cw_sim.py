@@ -46,7 +46,8 @@ below), so any difference between the two models is due to coherence between the
 (near-)degenerate upper states.
 
 ENSEMBLE: average over a Gaussian spread of gamma*B_par (sigma, MHz rms; field
-gradients + spin bath), over the three 14N hyperfine classes (m_I = -1, 0, +1), and,
+gradients + spin bath; dist="lorentz" uses a Lorentzian of the same FWHM, the shape
+expected for a magnetically dilute spin bath, Kittel & Abrahams 1953), over the three 14N hyperfine classes (m_I = -1, 0, +1), and,
 with sigma_E > 0, over a random transverse E (Gaussian Ex, Ey with rms sigma_E per axis:
 random size AND direction relative to the MW, as from nearby charges in a dense sample).
 
@@ -107,6 +108,7 @@ BASE = dict(
     C0=0.3,           # PL contrast ms=+-1 vs 0
     pol="linear",
     nq=31,            # quadrature points over the Gaussian spread
+    dist="gauss",     # shape of the gamma*B_par spread: "gauss" (rms sigma) or "lorentz" (same FWHM)
 )
 IDEAL_SINGLE = dict(sigma=0.0, hf=False, T2=1000.0)                # isolated NV, no dephasing
 ENSEMBLE = dict(sigma=0.5, hf=True, T2=2.0)                        # DNVB14-like (assumed)
@@ -160,7 +162,13 @@ def ensemble(p, delta0):
     |E| Rayleigh (Gauss-Laguerre in |E|^2) and a uniform direction. The spectrum depends on
     the strain direction only through 2*phi, so phi is sampled uniformly over [0, pi).
     """
-    if p["sigma"] > 0:
+    if p["sigma"] > 0 and p["dist"] == "lorentz":
+        # Lorentzian with the same FWHM as a Gaussian of rms sigma (HWHM = 1.1774 sigma):
+        # Gauss-Legendre in the cumulative probability u, delta = HWHM tan(pi (u - 1/2))
+        u, w = np.polynomial.legendre.leggauss(p["nq"])
+        x = 1.1774 * np.tan(0.5 * np.pi * u)
+        w = w / w.sum()
+    elif p["sigma"] > 0:
         x, w = hermegauss(p["nq"])
         w = w / w.sum()
     else:
@@ -526,6 +534,15 @@ def main():
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig3_washout.png"), dpi=150)
     plt.close(fig)
+
+    # ---- robustness: shape of the inhomogeneous distribution -----------------------------
+    say("\nRobustness to the assumed shape of the gamma*B_par spread (equal FWHM):")
+    for dist, nq in [("gauss", 21), ("lorentz", 61)]:
+        S = np.array([1 - np.divide(*peak_ratio(P(sigma=s, hf=False, T2=1000.0, Omega=1.0, nq=nq, dist=dist)))
+                      for s in sig])
+        rc, ri = peak_ratio(P(**{**ENSEMBLE, "Omega": 2.5, "dist": dist, "nq": max(nq, 31)}))
+        say(f"  {dist:7s}: S halves near sigma ~ {sig[np.argmax(S < S[0] / 2)]:.2f} MHz (Omega 1 MHz); "
+            f"DNVB14-like, Omega 2.5 MHz: R_coh {rc:.3f}, R_inc {ri:.3f}, S = {1 - rc/ri:+.3f}")
 
     # ---- figure 4: lineshape ambiguity (fit coherent ensemble with incoherent model) ------
     pe = P(**ENSEMBLE)
