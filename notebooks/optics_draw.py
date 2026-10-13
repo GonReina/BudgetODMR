@@ -27,11 +27,14 @@ def _txt(ax, x, y, s, **kw):
 
 
 def lens_v(ax, x, r, t=4.0, kind="biconvex", label=None, ly=None):
-    """Lens with its axis along x.  kind: biconvex | planoconvex_right (curved side +x)."""
+    """Lens with its axis along x.  kind: biconvex | planoconvex (flat face at x, curved side
+    towards +x) | planoconvex_left (flat face at x, curved side towards -x)."""
     y = np.linspace(-r, r, 50)
     sag = t / 2 * (1 - (y / r) ** 2)
     if kind == "biconvex":
         xs = np.r_[x - sag, (x + sag)[::-1]]
+    elif kind == "planoconvex_left":
+        xs = np.r_[np.full_like(y, x), (x - t * (1 - (y / r) ** 2) ** 0.8)[::-1]]
     else:  # asphere/condenser: flat face at x, curved towards +x, thickness t
         xs = np.r_[np.full_like(y, x), (x + t * (1 - (y / r) ** 2) ** 0.8)[::-1]]
     ax.add_patch(Polygon(np.c_[xs, np.r_[y, y[::-1]]], fc=C_OPT, alpha=0.35, ec=C_OPT, lw=0.8))
@@ -147,7 +150,8 @@ def draw_system(ax, S):
     Required keys: x_optic_front, x_pupil, pupil_r, optic ('objective'|'asphere'),
     x_dich, x_felh, x_lens, x_det, r_det, arm (list of arm elements, see notebook),
     y_source, source ('laser'|'fibre'), exc_y, exc_w (arrays along the arm),
-    w_exc_pupil, r_pl (collimated PL half-width), optional x_pinhole, r_pinhole."""
+    w_exc_pupil, r_pl (collimated PL half-width), optional x_pinhole, r_pinhole,
+    det_lens ('achromat' = AC254-150-A, default; 'acl' = ACL25416U-B detector lens)."""
     x_end = S["x_det"] + 8
     axis_lines(ax, x_end, S["y_source"], S["x_dich"])
     diamond(ax)
@@ -158,7 +162,12 @@ def draw_system(ax, S):
         _txt(ax, S["x_optic_front"] + 7, -14.5, "ACL25416U-B\nf=16, NA 0.79", va="top")
     dichroic(ax, S["x_dich"])
     plate_v(ax, S["x_felh"], 12.5, t=3.5, fc="#e8a33d", label="FELH0550")
-    lens_v(ax, S["x_lens"], 12.7, t=5.0, label="AC254-150-A")
+    if S.get("det_lens", "achromat") == "acl":
+        # thin-lens plane at x_lens; flat face 8.7 mm after it (BFL 7.3 mm to the detector)
+        lens_v(ax, S["x_lens"] + 8.7, 12.7, t=14.0, kind="planoconvex_left")
+        _txt(ax, S["x_lens"] + 1.7, 14.5, "ACL25416U-B")
+    else:
+        lens_v(ax, S["x_lens"], 12.7, t=5.0, label="AC254-150-A")
     if S.get("x_pinhole") is not None:
         pinhole(ax, S["x_pinhole"], max(S["r_pinhole"], 0.25), label=S.get("pinhole_label", "pinhole"))
     detector(ax, S["x_det"], S["r_det"])
