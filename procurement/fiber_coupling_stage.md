@@ -52,7 +52,7 @@ not for power control.
 3. *Defined polarisation* at the sample, for later NV-orientation-selective work.
 
 Do not rotate it to attenuate. At 45° to the slow axis, the fibre's thermal birefringence
-drift becomes ±17 % power wander at 15 dB extinction ratio (`notebooks/Optical_Setup.ipynb` §2).
+drift becomes ±17 % power wander at 15 dB extinction ratio (`theory/optics/Optical_Setup.ipynb` §2).
 
 **ND filters (after the polariser), AR-coated, in tilted kinematic cage mounts.** In a cage
 every plate is square to the beam. A surface normal to a collimated beam reflects straight
@@ -111,13 +111,13 @@ in an `AD15F`. The F810 body is Ø15 mm, so it does not fit a KAD12NT.
    aligned to the connector key, which gives a first guess. Re-peak M2 only if the power fell.
 8. **Lock the polariser at maximum** (the slow axis) and record the angle.
 9. **NDs:** screw into the KC1T/M mounts, tilt 2–3°. Check that the laser noise does not
-   change with them in (`smcv/laser_rin_pc.py`). Then check the power stability behind the
+   change with them in (`experiments/calibration/laser_rin_pc.py`). Then check the power stability behind the
    chain for ~30 min while touching the fibre: a few % or less.
 
 ## Optional: larger excitation spot (lens L)
 
 Current geometry: the N40X-PF delivers the laser **and** collects the PL; an ACL25416U-B
-focuses the PL onto the PDA10A2. Ray-trace result (`notebooks/optics_model.py`): the
+focuses the PL onto the PDA10A2. Ray-trace result (`theory/optics/optics_model.py`): the
 objective delivers **2.03 %** of all emitted PL to the detector, i.e. everything inside its
 NA 0.75. An ACL25416U-B in its place delivers 1.67 %, because its Ø25 mm beam is clipped by
 the 1″ downstream optics. After the objective's own (unmeasured, ~85–90 %) transmission the

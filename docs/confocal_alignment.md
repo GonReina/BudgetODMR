@@ -2,7 +2,7 @@
 
 Step-by-step alignment of the confocal configuration (N40X-PF + AC254-150 + pinhole) and how
 to find the diamond surface. Numbers marked *(notebook §n)* come from the optical model in
-`notebooks/Optical_Setup.ipynb`.
+`theory/optics/Optical_Setup.ipynb`.
 
 Written 1 Oct 2026.
 

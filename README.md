@@ -7,58 +7,108 @@ drives the ADF4351 over SPI and digitizes the photodiode on its fast ADC.
 
 ## Repository layout
 
+Scripts are grouped by the experiment they perform. Each experiment folder holds
+its acquisition script(s) **and** the analysis/plot scripts for the data they
+produce. Files marked **[RP]** run ON the RedPitaya (Python 3, needs `rp` +
+`spidev`, run as root); everything else runs on the PC.
+
 ```
-redpitaya/   Scripts that run ON the RedPitaya (Python 3, needs `rp` + `spidev`, run as root)
-  diag_spi_alive.py     Diagnostic: prove the SPI path by forcing LD high/low via R5 (no lock needed). Run first.
-  set_frequency.py      Continuously output any single frequency; LD read as a status flag only.
-  odmr_sweep_robust.py  Averaged repeated sweeps using a FIXED settle time (never blocks on LD).  <- main experiment
-  odmr_redpitaya.py     Original single sweep: per point, wait for the LD lock edge then average IN1.
-  odmr_repeat_sweeps.py Run odmr_redpitaya.py's sweep N times, one CSV per run.
-  record_photodiode.py  Log IN1 (photodiode) for a fixed duration, e.g. 10 minutes.
-  lock_diagnostic_sweep.py  Dwell at each frequency so a human can watch the scope + D3 LED.
-  test_500mhz_locktime.py   Bench test: program 500 MHz, time the PLL lock.
-  outputsine.py         Quick OUT2 sine generator sanity check.
+experiments/
+  common/        Shared PC-side instrument code. Every PC script puts this folder on sys.path.
+    config.json           All experiment settings (IPs, sweep range, power, lock-in params, data paths).
+    expconfig.py          Loads config.json (used by every PC script and plotter).
+    odmr_smcv100b_pc.py   Scpi / SMCV100B / RedPitayaADC classes, and runnable as the stepped DC ODMR
+                          sweep (SMCV sets freq, RedPitaya reads IN1, MW on/off ratio).
+    lockin_common.py      Shared software lock-in engine (AM / FM / FM-derivative).
+    redpitaya_scope.py    Fill-synchronised RedPitaya acquisition (use for any new acquisition).
 
-See TROUBLESHOOTING_GUIDE.md for the full hardware/software debugging roadmap.
+  low-cost/      ADF4351 synthesizer path (RedPitaya SPI, legacy Arduino)
+    diag_spi_alive.py     [RP] Prove the SPI path by forcing LD high/low via R5 (no lock needed). Run first.
+    diag_reference.py     [RP] Reference-clock / feedback diagnostic for a VCO that won't lock.
+    set_frequency.py      [RP] Continuously output any single frequency; LD read as a status flag only.
+    odmr_sweep_robust.py  [RP] Averaged repeated sweeps using a FIXED settle time.  <- main experiment
+    odmr_redpitaya.py     [RP] Original single sweep: per point, wait for the LD lock edge then average IN1.
+    odmr_repeat_sweeps.py [RP] Run odmr_redpitaya.py's sweep N times, one CSV per run.
+    lock_diagnostic_sweep.py  [RP] Dwell at each frequency so a human can watch the scope + D3 LED.
+    test_500mhz_locktime.py   [RP] Bench test: program 500 MHz, time the PLL lock.
+    average_sweeps.py     Average repeated runs and plot the result (lock filter + normalize + median).
+    arduino/              Legacy Arduino path: adf4351_bridge.ino + odmr_sweep.py (PC owns the PLL math),
+                          plus earlier sketches.
 
-  All three data-producing scripts write under a `data/` subfolder relative
-  to wherever they're run (e.g. `/root/data/...`), so one Task Scheduler job
-  on the PC can sync everything at once -- see "Backing up data" below.
+  dc-odmr/       Unmodulated SMCV sweeps (the main DC sweep itself is common/odmr_smcv100b_pc.py)
+    odmr_smcv100b.py      [RP] SMCV-driven sweep with the script running on the RedPitaya.
+    acq_dc_integration_sweep.py  DC sweep at several integration times (data for the lock-in tutorial).
+    plot_odmr.py          Plot one ODMR spectrum, mark the resonance dip.
 
-smcv/        Scripts that run ON YOUR PC and drive the R&S SMCV100B over LAN (SCPI)
-             while reading the RedPitaya's ADC via its SCPI server. Shared config.json.
-  config.json           All experiment settings (IPs, sweep range, power, lock-in params).
-  expconfig.py          Loads config.json (used by every smcv/ script + analysis/plot_magnet_scan.py).
-  check_instruments.py  Prove you can talk to the SMCV and the RedPitaya SCPI server. Run first.
-  odmr_smcv100b_pc.py   Stepped ODMR sweep (SMCV sets freq, RedPitaya reads IN1, MW on/off ratio).
-  odmr_magnet_scan.py   Prompt for a magnet position, run a sweep, repeat (Zeeman study).
-  odmr_lockin_am_pc.py        Lock-in AM  -> line appears as a PEAK.
-  odmr_lockin_fm_pc.py        Lock-in FM  (magnitude) -> |derivative|, NULL at centre.
-  odmr_lockin_fm_deriv_pc.py  Lock-in FM  (phase-sensitive) -> signed derivative, ZERO-CROSSING at centre.
-  lockin_common.py      Shared lock-in engine used by the three odmr_lockin_* scripts.
-             See "Lock-in ODMR methods" below.
+  ac-odmr/       AM lock-in
+    odmr_lockin_am_pc.py  Lock-in AM -> line appears as a PEAK.
+    acq_am_tutorial.py    AM demo data for the lock-in tutorial.
+    plot_lockin.py        Analyse lock-in runs (AM peak / FM null / FM-derivative zero-crossing)
+                          -> centre(s), splitting, B. Also used for the fm-odmr runs.
+    plot_lockin_envelope.py   Hilbert-envelope view of each lock-in run.
 
-magnet_field_calc.py   (PC) Estimate on-axis magnet field & NV splitting vs distance.
+  fm-odmr/       FM lock-in
+    odmr_lockin_fm_pc.py        Lock-in FM (magnitude) -> |derivative|, NULL at centre.
+    odmr_lockin_fm_deriv_pc.py  Lock-in FM (phase-sensitive) -> signed derivative, ZERO-CROSSING at centre.
+    odmr_fm_mfli_phase_pc.py    Signed FM detection with the MFLI lock-in (experimental).
+    acq_fm_tutorial.py          FM demo data for the lock-in tutorial.
 
-analysis/    Scripts that run ON YOUR PC after copying CSVs into data/ (needs matplotlib)
-  plot_odmr.py          Plot one ODMR spectrum, mark the resonance dip.
-  plot_photodiode.py    Plot a photodiode time series (+ noise-% figure).
-  plot_laser_calibration.py  PL & relative-noise vs laser current.
-  average_sweeps.py     Average repeated runs and plot the result (lock filter + normalize + median).
-  plot_magnet_scan.py   Waterfall + dip separation + estimated field vs magnet position.
-  plot_lockin.py        Analyse lock-in runs (AM peak / FM null / FM-derivative zero-crossing) -> centre(s), splitting, B.
+  calibration/   Connectivity checks, detector / laser noise and characterisation
+    check_instruments.py  Prove you can talk to the SMCV and the RedPitaya SCPI server. Run first.
+    diag_lockin_raw.py    Park on a resonance and inspect the raw modulated photodiode waveform.
+    laser_rin_pc.py       Laser relative intensity noise (`selftest` mode runs without hardware).
+    odmr_noise_budget_pc.py   Noise budget of the FM lock-in magnetometer.
+    acq_noise_photodiode.py, acq_noise_vs_integration.py   Noise data for the lock-in tutorial.
+    record_photodiode.py  [RP] Log IN1 (photodiode) for a fixed duration  -> plot_photodiode.py
+    pd_vs_laser_current.py    [RP] Photodiode vs laser current  -> plot_laser_calibration.py
+    outputsine.py         [RP] Quick OUT2 sine generator sanity check.
+    LaserChar.py, LaserIntensityThreshold.py (+ CSVs)   Laser power / threshold characterisation.
+    cal0_*..cal3_*, plot_cal*.py, calib_common.py   Step-by-step laser/detector calibration:
+                          power at the sample vs current, RIN vs current and vs photocurrent,
+                          PL saturation + contrast/linewidth/heating. Run order and outputs:
+                          CALIBRATION_PROTOCOL.md.
 
-arduino/     Legacy Arduino control path (before the move to RedPitaya)
-  adf4351_bridge.ino + odmr_sweep.py   PC owns the PLL math, Arduino latches registers.
-  hard_code_registers/, odmr_sweep/, with_library.ino   earlier sketches.
+  power-sweep/   DC and FM sweeps across MW power (power broadening)
+    odmr_power_sweep_{dc,fm}_pc.py, powersweep_acq.py      acquisition
+    plot_power_sweep_{dc,fm}.py, powersweep_common.py      analysis
 
-docs/        ADF4351.pdf datasheet
-data/        CSV/PNG outputs (analysis scripts read from here)
+  magnet-scan/   Zeeman studies vs magnet position
+    odmr_magnet_scan.py (DC), odmr_magnet_scan_{am,fm,fm_deriv}.py (lock-in), odmr_watch_magnet_pc.py
+    plot_magnet_scan.py, plot_magnet_lockin*.py, plot_magnet_two_orientation.py, plot_fm_two_orientations.py
+
+  sensitivity/   FM magnetometer sensitivity and closed-loop field lock
+    odmr_sensitivity_fm_pc.py (also a helper library for other folders), odmr_sensitivity_fm_wb_pc.py,
+    odmr_fieldlock_fm_pc.py, and their plot_*.py
+
+  self-oscillation/   Self-oscillating FM loop (WP3 measurements)
+    odmr_selfosc_{fm,power,cycletime,precision}_pc.py, selfosc_common.py, plot_selfosc_*.py
+
+theory/          Simulations, calculators, notebooks (most run without hardware)
+  nv_odmr_sim.py        8-line NV spectrum + field fit (imported by the magnet-scan plotters).
+  nv_odmr.py            NV ground-state spin / CW-ODMR calculator.
+  nv_vsystem_cw_sim.py  Coherent V-system CW-ODMR simulation (+ .md write-up, vsystem_sim_out/).
+  magnet_field_calc.py  Estimate on-axis magnet field & NV splitting vs distance.
+  nv_deep_dive_guide.md, nv_quiz.md
+  lockin-tutorial/      lockin_odmr_tutorial.ipynb + tutorial_data/ (filled by the acq_*.py scripts above)
+  optics/               Optical_Setup.ipynb + optics_model.py, optics_draw.py
+  proposal/             Funding-proposal work package: LaTeX report, WorkPackage3.ipynb,
+                        autonomous_nv_sim.py, figures, selfosc_data/
+
+procurement/     Hardware-upgrade notes and the shopping-list generator
+docs/            ADF4351.pdf datasheet, confocal alignment notes
+data/            CSV/PNG outputs (analysis scripts read from here)
 ```
+
+See TROUBLESHOOTING_GUIDE.md for the full ADF4351 hardware/software debugging
+roadmap. To use the **[RP]** scripts, copy them to the RedPitaya (the scripts in
+`low-cost/` must stay together, since some import `odmr_redpitaya.py`). The
+data-producing ones write under a `data/` subfolder relative to wherever they're
+run (e.g. `/root/data/...`), so one Task Scheduler job on the PC can sync
+everything at once -- see "Backing up data" below.
 
 ## Lock-in ODMR methods (SMCV100B)
 
-The stepped DC sweep (`smcv/odmr_smcv100b_pc.py`) dwells and averages at each
+The stepped DC sweep (`experiments/common/odmr_smcv100b_pc.py`) dwells and averages at each
 frequency -- it works but is slow at fine resolution and limited by laser 1/f and
 mains noise. The lock-in scripts instead modulate the microwaves at `f_mod` (a few
 kHz, set in `config.json`) and detect the photodiode's response at that frequency,
@@ -67,19 +117,19 @@ and the resonance stands out cleanly. The SMCV modulates itself with its interna
 LF generator (K197 option); for AM and FM nothing extra is wired (photodiode ->
 IN1 only). The Red Pitaya demodulates against the known `f_mod`. Test in this order:
 
-1. **AM** -- `smcv/odmr_lockin_am_pc.py`
+1. **AM** -- `experiments/ac-odmr/odmr_lockin_am_pc.py`
    The microwave AMPLITUDE is switched sinusoidally at `f_mod`. On resonance the PL
    is modulated at `f_mod`; off resonance it is not. The magnitude lock-in
    `R = sqrt(X^2 + Y^2)` therefore traces the ODMR line as a **peak**. Simplest and
    most robust -- start here to confirm the whole chain end to end.
 
-2. **FM, magnitude** -- `smcv/odmr_lockin_fm_pc.py`
+2. **FM, magnitude** -- `experiments/fm-odmr/odmr_lockin_fm_pc.py`
    The microwave FREQUENCY is dithered by ~a linewidth at `f_mod`. The PL is then
    modulated in proportion to the SLOPE of the line, so the magnitude lock-in gives
    the **|derivative|**: two lobes with a null exactly at the line centre. A sharper
    centre feature than AM, still phase-independent (no reference cable).
 
-3. **FM, phase-sensitive (derivative)** -- `smcv/odmr_lockin_fm_deriv_pc.py`
+3. **FM, phase-sensitive (derivative)** -- `experiments/fm-odmr/odmr_lockin_fm_deriv_pc.py`
    Same FM dither, but demodulated IN PHASE with the modulation reference. This
    yields the **signed derivative** -- a dispersive curve that crosses zero at the
    centre, the most precise centre estimate (best for tracking small Zeeman
@@ -88,7 +138,7 @@ IN1 only). The Red Pitaya demodulates against the known `f_mod`. Test in this or
    generator, use the FM-magnitude script instead -- its null still locates centre.
 
 All three save `freq_MHz,signal` CSVs (+ a running average) under `data_dir`. Analyse
-them with `analysis/plot_lockin.py`: set `MODE` to `am`, `fm`, or `fm_deriv` and it
+them with `experiments/ac-odmr/plot_lockin.py`: set `MODE` to `am`, `fm`, or `fm_deriv` and it
 picks the right centre-finder for that lineshape (AM = peak, FM = null between lobes,
 FM-derivative = zero-crossing via integration), then reports the resonance centre(s),
 and for a Zeeman pair the splitting and implied axial field B = df / (2*gamma).
@@ -97,28 +147,28 @@ and for a Zeeman pair the splitting and implied axial field B = df / (2*gamma).
 
 1. **Run a sweep** on the RedPitaya (edit the config block at the top first):
    ```bash
-   python3 redpitaya/odmr_redpitaya.py        # writes data/odmr_spectrum_2.csv
+   python3 experiments/low-cost/odmr_redpitaya.py        # writes data/odmr_spectrum_2.csv
    ```
 2. Data backs up to the PC automatically (see below) — or copy it manually:
    ```bash
    scp -r root@rp-XXXXXXXX.local:/root/data ./
-   python3 analysis/plot_odmr.py
+   python3 experiments/dc-odmr/plot_odmr.py
    ```
 
 ### Averaging repeated sweeps (better SNR)
 ```bash
-python3 redpitaya/odmr_repeat_sweeps.py        # writes data/odmr_runs/run_01.csv ...
-python3 analysis/average_sweeps.py             # -> data/odmr_average.csv + .png
+python3 experiments/low-cost/odmr_repeat_sweeps.py        # writes data/odmr_runs/run_01.csv ...
+python3 experiments/low-cost/average_sweeps.py             # -> data/odmr_average.csv + .png
 ```
 
 ### Recording the photodiode over time
 ```bash
-python3 redpitaya/record_photodiode.py         # 10 min by default -> data/photodiode_*.csv
-python3 analysis/plot_photodiode.py
+python3 experiments/calibration/record_photodiode.py         # 10 min by default -> data/photodiode_*.csv
+python3 experiments/calibration/plot_photodiode.py
 ```
 
 All scripts are configured by editing the variables at the top of each file —
-there are no command-line arguments by design. The `analysis/` scripts find the
+there are no command-line arguments by design. The plot/analysis scripts find the
 `data/` folder automatically, so they can be run from anywhere.
 
 ## Backing up data automatically

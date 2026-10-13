@@ -217,17 +217,17 @@ your existing convention).
 
 | Script | Purpose |
 |--------|---------|
-| `redpitaya/diag_spi_alive.py` | **Proves the SPI path** by forcing the LD pin HIGH then LOW via R5 (DB23:22). No PLL/lock needed. First thing to run when "nothing works." |
-| `redpitaya/set_frequency.py` | **Continuously output any frequency.** Correct integer-N/fractional-N register math (incl. the LDF fix), holds the tone, polls LD as a *status* flag, prints the VTUNE check reminder. Use for §2.3/§2.4 and any time you just want a tone. |
-| `redpitaya/odmr_sweep_robust.py` | **Precise, repeatable, averaged sweeps** recording the photodiode. Fixed settle time (LD optional/logged, never blocking), N captures/point, M repeated sweeps accumulated into a running average + per-run CSVs. This is the main experiment. |
-| `redpitaya/test_500mhz_locktime.py` | Patched: `R2` now `0x18005F42` (LDF = 1) so the 500 MHz lock-time test is meaningful. |
+| `experiments/low-cost/diag_spi_alive.py` | **Proves the SPI path** by forcing the LD pin HIGH then LOW via R5 (DB23:22). No PLL/lock needed. First thing to run when "nothing works." |
+| `experiments/low-cost/set_frequency.py` | **Continuously output any frequency.** Correct integer-N/fractional-N register math (incl. the LDF fix), holds the tone, polls LD as a *status* flag, prints the VTUNE check reminder. Use for §2.3/§2.4 and any time you just want a tone. |
+| `experiments/low-cost/odmr_sweep_robust.py` | **Precise, repeatable, averaged sweeps** recording the photodiode. Fixed settle time (LD optional/logged, never blocking), N captures/point, M repeated sweeps accumulated into a running average + per-run CSVs. This is the main experiment. |
+| `experiments/low-cost/test_500mhz_locktime.py` | Patched: `R2` now `0x18005F42` (LDF = 1) so the 500 MHz lock-time test is meaningful. |
 
 Typical bring-up sequence after a power fix:
 ```bash
-sudo python3 redpitaya/diag_spi_alive.py        # SPI path OK?  (LD follows commands)
-sudo python3 redpitaya/set_frequency.py         # 500 MHz tone on the scope? LD high?
-sudo python3 redpitaya/odmr_sweep_robust.py     # run the averaged sweep
-python3 analysis/average_sweeps.py              # (on the PC) plot the averaged result
+sudo python3 experiments/low-cost/diag_spi_alive.py        # SPI path OK?  (LD follows commands)
+sudo python3 experiments/low-cost/set_frequency.py         # 500 MHz tone on the scope? LD high?
+sudo python3 experiments/low-cost/odmr_sweep_robust.py     # run the averaged sweep
+python3 experiments/low-cost/average_sweeps.py              # (on the PC) plot the averaged result
 ```
 
 ---

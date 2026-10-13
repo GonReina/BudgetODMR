@@ -109,7 +109,7 @@ far into compression.
 **Their lock-in is our lock-in.** Rondin's ESR tracking applies two microwave frequencies
 ν± = ν̄ ± Δν/2 consecutively and uses D = S(ν₊) − S(ν₋) as the error signal, with
 Δν = 5 MHz and ~100–110 ms per point. That is exactly the two-point dither scheme in
-`smcv/odmr_fieldlock_fm_pc.py`. Our closed-loop approach is the published one.
+`experiments/sensitivity/odmr_fieldlock_fm_pc.py`. Our closed-loop approach is the published one.
 
 ---
 
