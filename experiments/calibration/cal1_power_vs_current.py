@@ -19,21 +19,26 @@ Run it twice:
                                   pupil. Essential once a fibre is in the
                                   path, as the coupling then depends on it.)
 
-Settings: the PM101A is set to 532 nm and zeroed with the beam blocked at the
-start. Do cal1_loss_budget.py first so the infrared check and T_obj exist.
+Power meter: the PM101A analog output on Red Pitaya IN2 (see
+cal0_check_power_meter.py), set BY HAND to 532 nm and a FIXED range covering
+the top current. At the start it is zeroed with the beam blocked, then the
+saved mW/V factor is reused or measured at the top current against Optical
+Power Monitor. Do cal1_loss_budget.py first so the infrared check and T_obj
+exist.
 
 Output: <data_dir>/calibration/
           power_vs_current_<POSITION>_<stamp>.csv       one row per current step
-              step,direction,current_mA,P_mW,P_std_mW,slope_mW_per_s,n,tec_C,settle_s
+              step,direction,current_mA,P_mW,P_std_mW,slope_mW_per_s,n,tec_C,settle_s,
+              V_mean,V_zero
           power_vs_current_<POSITION>_<stamp>_log.csv   every logged reading
-              step,current_mA,t_s,P_mW
+              step,current_mA,t_s,P_mW,V      (V = IN2 volts above zero)
 Next:   plot_cal1_power.py -> power_calibration.csv (the x-axis for steps 2-3)
 
 Run on the PC:  python cal1_power_vs_current.py
 """
 
 from calib_common import (PowerMeter, Stop, TableWriter, ask_current, ask_tec,
-                          cal_path, pause, stamp)
+                          cal_path, pause, prepare_power_meter, stamp)
 
 # --- settings ---------------------------------------------------------------
 POSITION = "before_objective"    # or "laser_output" (optional path-transmission check)
@@ -45,8 +50,7 @@ LOG_S = 45.0                     # 30-60 s of logging per current
 LOG_PERIOD_S = 0.2
 SETTLE_MIN_S, SETTLE_MAX_S = 30.0, 300.0
 SETTLE_TOL = 0.005               # stable = < 0.5 % drift over 10 s
-WAVELENGTH_NM = 532.0
-MANUAL_PM = False                # True: type the readings in even if USB works
+WAVELENGTH_NM = 532.0            # set on the PM101A; recorded only
 
 
 def main():
@@ -57,21 +61,24 @@ def main():
         plan += [(i, "down") for i in reversed(CURRENTS_MA[:-1])]
 
     tag = f"power_vs_current_{POSITION}_{stamp()}"
-    pm = PowerMeter(WAVELENGTH_NM, manual=MANUAL_PM)
-    meta = dict(experiment="power_vs_current", position=POSITION,
-                wavelength_nm=WAVELENGTH_NM, log_s=LOG_S, power_meter=pm.idn)
-    summ = TableWriter(cal_path(tag + ".csv"),
-                       ["step", "direction", "current_mA", "P_mW", "P_std_mW",
-                        "slope_mW_per_s", "n", "tec_C", "settle_s"], meta)
-    log = TableWriter(cal_path(tag + "_log.csv"),
-                      ["step", "current_mA", "t_s", "P_mW"], meta)
+    pm = PowerMeter()
+    summ = log = None
     print(f"\nPOWER vs CURRENT at '{POSITION}': {len(plan)} steps "
-          f"({'up + down' if SWEEP_DOWN else 'up'}), ~{LOG_S:.0f} s logging each")
-    print(f"-> {summ.path}\n")
+          f"({'up + down' if SWEEP_DOWN else 'up'}), ~{LOG_S:.0f} s logging each\n")
 
     try:
         pause(f"Put the S120C at '{POSITION}'")
-        pm.zero()
+        prepare_power_meter(pm, max(CURRENTS_MA), I_MAX_MA, SETTLE_MIN_S,
+                            SETTLE_MAX_S)
+        meta = dict(experiment="power_vs_current", position=POSITION,
+                    wavelength_nm=WAVELENGTH_NM, log_s=LOG_S, **pm.meta())
+        summ = TableWriter(cal_path(tag + ".csv"),
+                           ["step", "direction", "current_mA", "P_mW", "P_std_mW",
+                            "slope_mW_per_s", "n", "tec_C", "settle_s", "V_mean",
+                            "V_zero"], meta)
+        log = TableWriter(cal_path(tag + "_log.csv"),
+                          ["step", "current_mA", "t_s", "P_mW", "V"], meta)
+        print(f"-> {summ.path}")
         for step, (planned, direction) in enumerate(plan):
             print("-" * 72 + f"\nstep {step + 1}/{len(plan)} ({direction})")
             cur = ask_current(planned, I_MAX_MA)
@@ -84,15 +91,18 @@ def main():
             print(f"  {cur:.2f} mA ({direction}): {r['mean']:.5f} mW "
                   f"+/- {r['std']:.5f} ({rel:.2f} %)")
             summ.row(step, direction, cur, r["mean"], r["std"], r["slope"], r["n"],
-                     tec, settle_s)
-            for t, p in zip(r["t"], r["p"]):
-                log.row(step, cur, t, p)
+                     tec, settle_s, r["v"].mean(), pm.v_zero)
+            for t, p, v in zip(r["t"], r["p"], r["v"]):
+                log.row(step, cur, t, p, v)
     except (Stop, KeyboardInterrupt):
         print("\nStopped -- steps so far are saved.")
     finally:
-        summ.close()
-        log.close()
+        for w in (summ, log):
+            if w is not None:
+                w.close()
         pm.close()
+    if summ is None:
+        return
     print(f"\nSaved {summ.path}")
     if POSITION != "laser_output":
         print("Next: plot_cal1_power.py (optionally first repeat with POSITION = "

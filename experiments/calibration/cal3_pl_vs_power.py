@@ -25,9 +25,17 @@ Signal path: APD (or PDA10A2) -> Red Pitaya IN1; SMCV100B -> amplifier ->
 antenna. The MW level goes through SMCV100B.set_power_dbm(), which enforces
 the config.json mw_chain limit.
 
+POWER MONITOR (MONITOR_POWER, modes "nv" and "background"): the PM101A is
+NOT wired to the Red Pitaya here, so its reading is TYPED IN at every current,
+before the PL reading and again after the ODMR sweep (blank = skip). Put the
+S120C on a pick-off of the excitation beam and zero the meter yourself. The
+readings show whether the laser reproduced the step-1 power at each current
+and whether it drifted during the sweep.
+
 Output: <data_dir>/calibration/
           pl_vs_current_<MODE>_<stamp>.csv
-              step,current_mA,PL_V,PL_std_V,dark_V,tec_C,odmr_file
+              step,current_mA,PL_V,PL_std_V,dark_V,tec_C,odmr_file,
+              P_mon_mW,P_mon_end_mW          (typed-in monitor; NaN if skipped)
           pl_vs_current_<MODE>_<stamp>/odmr_XX.csv   (freq_MHz,signal = PL_on/PL_off)
           nd_check_<stamp>.csv                        (MODE "nd_check")
 Next:   plot_cal3_pl_saturation.py
@@ -64,6 +72,7 @@ ODMR_SWEEPS = 1
 MW_POWER_DBM = POWER_DBM    # config.json sweep.power_dbm; KEEP IT FIXED for the run
 MW_SETTLE_S = 0.02
 N_LINES = 2                 # resonances in the window (1 at zero field)
+MONITOR_POWER = True        # type in the PM101A (pick-off) reading at every current
 
 
 def pl_reading(adc, n=PL_READS):
@@ -96,6 +105,14 @@ def measure_dark(adc):
     print(f"  dark = {d * 1e3:.3f} +/- {ds * 1e3:.3f} mV")
     pause("  Unblock the laser")
     return d
+
+
+def monitor_reading(when):
+    """Power meter reading typed in by the user (mW), NaN if skipped or off."""
+    if not MONITOR_POWER:
+        return np.nan
+    p = ask_float(f"  power meter reading {when} (mW, blank = skip)", blank_ok=True)
+    return np.nan if p is None else p
 
 
 def run_nd_check(adc):
@@ -142,10 +159,11 @@ def run_sweep(adc, src):
     do_odmr = DO_ODMR and MODE == "nv" and src is not None
     out = TableWriter(cal_path(tag + ".csv"),
                       ["step", "current_mA", "PL_V", "PL_std_V", "dark_V", "tec_C",
-                       "odmr_file"],
+                       "odmr_file", "P_mon_mW", "P_mon_end_mW"],
                       meta=dict(experiment="pl_vs_current", mode=MODE,
                                 mw_power_dBm=MW_POWER_DBM if do_odmr else "none",
-                                n_lines=N_LINES))
+                                n_lines=N_LINES,
+                                power_monitor="manual" if MONITOR_POWER else "none"))
     print(f"\nPL vs CURRENT ({MODE}) -> {out.path}")
     if do_odmr:
         print(f"  quick ODMR: {ODMR_F_START}-{ODMR_F_STOP} MHz / {ODMR_STEP_MHZ} "
@@ -162,9 +180,11 @@ def run_sweep(adc, src):
             wait_stable(lambda: integrate(adc), 0.0, 10.0, SETTLE_TOL, SETTLE_MIN_S,
                         SETTLE_MAX_S, unit="mV", scale=1e3)
             tec = ask_tec()
+            mon = monitor_reading("now")
             pl, pls = pl_reading(adc)
             print(f"  PL = {(pl - dark) * 1e3:.3f} mV above dark (+/- {pls * 1e3:.3f})")
             fname = ""
+            mon_end = np.nan
             if do_odmr:
                 sig = odmr_sweep(src, adc, freqs)
                 fname = f"odmr_{step:02d}.csv"
@@ -183,8 +203,13 @@ def run_sweep(adc, src):
                           f"{np.mean([ln['f0'] for ln in fit['lines']]):.3f} MHz")
                 else:
                     print("    (ODMR fit failed -- check the spectrum/N_LINES)")
+                mon_end = monitor_reading("after the sweep")
+                if np.isfinite(mon_end) and np.isfinite(mon) and mon:
+                    print(f"    laser power drift during the sweep: "
+                          f"{100 * (mon_end / mon - 1):+.2f} %")
             out.row(step, cur, pl, pls, dark, tec,
-                    os.path.join(os.path.basename(spec_dir), fname) if fname else "")
+                    os.path.join(os.path.basename(spec_dir), fname) if fname else "",
+                    mon, mon_end)
         if ask_yes("\nMeasure the dark level again (drift check)?"):
             d2 = measure_dark(adc)
             print(f"  dark drift: {(d2 - dark) * 1e3:+.3f} mV")

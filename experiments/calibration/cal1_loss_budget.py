@@ -27,28 +27,34 @@ does this).
   * The S120C reads up to 50 mW. Check the laser output is below that first.
   * Goggles on.
 
+The PM101A is read through its analog output on Red Pitaya IN2 (see
+cal0_check_power_meter.py): FIXED range, 532 nm, for the whole run. The
+bandpass check is a ratio, so it does not depend on the mW/V factor.
+
 Procedure (the script prompts each step):
-  For each position: place the sensor, block the beam and zero, then for each
-  current in CURRENTS_MA set the LDC200C, wait for the reading to settle, log
-  LOG_S seconds (and again with the bandpass filter where requested).
+  At the first position: zero, then reuse the saved mW/V factor or measure
+  it at the top current against Optical Power Monitor. For each position:
+  place the sensor, block the beam and zero, then for each current in
+  CURRENTS_MA set the LDC200C, wait for the reading to settle, log LOG_S
+  seconds (and again with the bandpass filter where requested).
 
 Output: <data_dir>/calibration/loss_budget_<stamp>.csv
-        position,current_mA,filter,P_mW,P_std_mW,slope_mW_per_s,n,tec_C,settle_s
+        position,current_mA,filter,P_mW,P_std_mW,slope_mW_per_s,n,tec_C,settle_s,
+        V_mean,V_zero          (IN2 volts above zero, and the zero offset)
 Next:   cal1_power_vs_current.py, then plot_cal1_power.py
 
 Run on the PC:  python cal1_loss_budget.py
 """
 
 from calib_common import (PowerMeter, Stop, TableWriter, ask_current, ask_tec,
-                          cal_path, pause, stamp)
+                          cal_path, pause, prepare_power_meter, stamp)
 
 # --- settings ---------------------------------------------------------------
 CURRENTS_MA = [135.0, 140.0, 147.0]   # "a few powers" above threshold
 I_MAX_MA = 150.0                      # never ask for more (set to your LDC200C limit)
 LOG_S = 20.0                          # logging time per reading
 SETTLE_MIN_S, SETTLE_MAX_S = 20.0, 180.0
-WAVELENGTH_NM = 532.0
-MANUAL_PM = False                     # True: type the readings in even if USB works
+WAVELENGTH_NM = 532.0                 # set on the PM101A; recorded only
 
 POSITIONS = ["laser_output", "before_objective", "after_objective"]
 # with a fibre: ["laser_output", "after_fibre", "before_objective", "after_objective"]
@@ -66,11 +72,8 @@ WHERE = {
 
 def main():
     path = cal_path(f"loss_budget_{stamp()}.csv")
-    pm = PowerMeter(WAVELENGTH_NM, manual=MANUAL_PM)
-    out = TableWriter(path, ["position", "current_mA", "filter", "P_mW", "P_std_mW",
-                             "slope_mW_per_s", "n", "tec_C", "settle_s"],
-                      meta=dict(experiment="loss_budget", wavelength_nm=WAVELENGTH_NM,
-                                bp_T532=BP_T532, log_s=LOG_S, power_meter=pm.idn))
+    pm = PowerMeter()
+    out = None
     print(f"\nLOSS BUDGET -> {path}")
     print(f"Positions: {', '.join(POSITIONS)};  currents: {CURRENTS_MA} mA\n")
 
@@ -78,7 +81,17 @@ def main():
         for pos in POSITIONS:
             print("=" * 72)
             pause(f"POSITION '{pos}': put the S120C {WHERE[pos]}")
-            pm.zero()
+            if out is None:
+                prepare_power_meter(pm, max(CURRENTS_MA), I_MAX_MA, SETTLE_MIN_S,
+                                    SETTLE_MAX_S)
+                out = TableWriter(path, ["position", "current_mA", "filter", "P_mW",
+                                         "P_std_mW", "slope_mW_per_s", "n", "tec_C",
+                                         "settle_s", "V_mean", "V_zero"],
+                                  meta=dict(experiment="loss_budget",
+                                            wavelength_nm=WAVELENGTH_NM,
+                                            bp_T532=BP_T532, log_s=LOG_S, **pm.meta()))
+            else:
+                pm.zero()
             for planned in CURRENTS_MA:
                 cur = ask_current(planned, I_MAX_MA)
                 if cur is None:
@@ -88,7 +101,7 @@ def main():
                 r = pm.log(LOG_S)
                 print(f"  {pos} @ {cur:.2f} mA: {r['mean']:.5f} mW")
                 out.row(pos, cur, "none", r["mean"], r["std"], r["slope"], r["n"],
-                        tec, settle_s)
+                        tec, settle_s, r["v"].mean(), pm.v_zero)
                 if pos in BP_POSITIONS:
                     pause("  Put the 532 nm BANDPASS filter in front of the sensor")
                     b = pm.log(LOG_S)
@@ -97,12 +110,13 @@ def main():
                           f"= {ratio:.3f}" + ("" if abs(ratio - 1) < 0.03 else
                                               "   <-- INFRARED present?"))
                     out.row(pos, cur, "bp532", b["mean"], b["std"], b["slope"],
-                            b["n"], tec, 0.0)
+                            b["n"], tec, 0.0, b["v"].mean(), pm.v_zero)
                     pause("  Remove the bandpass filter")
     except (Stop, KeyboardInterrupt):
         print("\nStopped -- rows so far are saved.")
     finally:
-        out.close()
+        if out is not None:
+            out.close()
         pm.close()
     print(f"\nSaved {path}\nNext: cal1_power_vs_current.py, then plot_cal1_power.py")
 

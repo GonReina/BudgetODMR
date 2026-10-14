@@ -82,6 +82,16 @@ def main():
     ok = np.isfinite(P)
     lines = [f"PL vs POWER ({os.path.basename(f_nv)}; T_obj = "
              f"{pmeta.get('T_obj', '?')})"]
+    if "P_mon_mW" in c and np.isfinite(c["P_mon_mW"]).any():
+        # power monitor (pick-off): does the laser reproduce the step-1 power?
+        rel = c["P_mon_mW"] / P
+        rel = rel / np.nanmedian(rel)
+        lines.append("  power monitor / step-1 power (normalised to the median): "
+                     + ", ".join(f"{i:.0f} mA {r:.3f}"
+                                 for i, r in zip(c["current_mA"], rel)))
+        if np.nanmax(np.abs(rel - 1)) > 0.03:
+            lines.append("  WARNING: the laser power differs from step 1 by > 3 % at "
+                         "some currents: the power axis is off there.")
 
     # ---- saturation fits -------------------------------------------------
     pn, yn, en = P[ok], pl[ok], pl_err[ok]
@@ -163,6 +173,10 @@ def main():
                          f"({np.ptp(P[gd]) * sd / DZFS_MHZ_PER_K:+.2f} K over the sweep)")
     else:
         lines.append("  no ODMR spectra (DO_ODMR off, or fits failed).")
+    if "P_mon_end_mW" in c and np.isfinite(c["P_mon_end_mW"]).any():
+        drift = 100 * (c["P_mon_end_mW"] / c["P_mon_mW"] - 1)
+        lines.append(f"  laser drift during each ODMR sweep (monitor): "
+                     f"{np.nanmin(drift):+.2f} to {np.nanmax(drift):+.2f} %")
 
     if f_nd:
         _, nd = read_table(f_nd)

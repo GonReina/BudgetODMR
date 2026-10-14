@@ -24,6 +24,7 @@
     "decimation": 1024,
     "n_buf": 16384,
     "input_gain": "LV",
+    "in2_gain": "HV",
     "subread_ms": 100.0
   },
   "paths": {

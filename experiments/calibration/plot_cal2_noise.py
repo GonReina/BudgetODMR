@@ -125,6 +125,10 @@ def main():
                          for x in pair])
             lines.append(f"  {c:7.2f}  {x_p[j]:10.4f}  {vdc[j] * 1e3:9.1f} " +
                          "".join(f"{x:12.1f}" for x in db(np.array(vals))))
+        if "v_mon_V" in rin and np.isfinite(rin["v_mon_V"]).any():
+            lines.append("  power monitor (IN2, before the ND filters): " + ", ".join(
+                f"{c:.1f} mA {p:.4g} mW ({v * 1e3:.1f} mV)" for c, p, v in
+                zip(cur, rin["p_mon_mW"], rin["v_mon_V"])))
         for f in F_CANDIDATES_HZ:
             r = np.array(rin_at[f])
             ax[1, 0].plot(cur, db(r), "o-", label=f"{f:.0f} Hz")
@@ -168,6 +172,10 @@ def main():
                   f"{float(vph['current_mA']):.2f} mA, {len(v)} levels)",
                   "   f (Hz)   log-log slope   a (nV/rtHz)  b (nV/rtHz/rtV)  "
                   "c (nV/rtHz/V)  RIN (dB/Hz)   dominant at the top level"]
+        if "v_mon_V" in vph and np.isfinite(vph["v_mon_V"]).any():
+            vm = np.asarray(vph["v_mon_V"], float)
+            lines.append(f"  laser power monitor over the levels: spread "
+                         f"{100 * np.ptp(vm) / np.mean(vm):.2f} % (peak-peak)")
         with open(os.path.join(cal_dir, "noise_vs_photocurrent.csv"), "w") as fcsv:
             fcsv.write(f"# source={os.path.basename(f_vph)}\n"
                        f"# current_mA={float(vph['current_mA'])}\n"

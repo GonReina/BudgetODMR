@@ -2,14 +2,18 @@
 Shared helpers for the laser / detector calibration protocol in this folder.
 CALIBRATION_PROTOCOL.md gives the run order:
 
-  cal0_*  check that the PM101A answers over USB (optional)
-  cal1_*  power after the objective vs laser current   (PM101A + S120C)
-  cal2_*  laser noise vs current and vs photocurrent    (PDA10A2 on Red Pitaya IN1)
-  cal3_*  PL vs power at the sample, with CW ODMR       (APD on IN1, SMCV100B)
+  cal0_*  check the PM101A analog output on Red Pitaya IN2, measure mW/V
+  cal1_*  power after the objective vs laser current   (PM101A + S120C on IN2)
+  cal2_*  laser noise vs current and vs photocurrent    (PDA10A2 on Red Pitaya IN1,
+                                                         optional power monitor on IN2)
+  cal3_*  PL vs power at the sample, with CW ODMR       (APD on IN1, SMCV100B,
+                                                         power monitor typed in)
 
 What lives here:
-  * PowerMeter      -- Thorlabs PM101A over USB/VISA, with a type-it-in fallback
-  * Photodiode      -- raw Red Pitaya IN1 records (RedPitayaScope)
+  * PowerMeter      -- Thorlabs PM101A read through its analog output on IN2;
+                       prepare_power_meter zeroes it and gets the mW/V factor
+  * Photodiode      -- raw Red Pitaya IN1 records (RedPitayaScope), optionally
+                       with the IN2 power monitor in the same acquisition
   * wait_stable     -- wait until a reading stops drifting (TEC / DPSS settling)
   * prompts         -- ask_current, ask_tec, ask_float, ...
   * TableWriter / read_table -- the repo CSV convention ('# key=value' header)
@@ -37,12 +41,15 @@ from expconfig import load_config
 _cfg = load_config()
 RP_IP, RP_PORT = _cfg["instruments"]["rp_ip"], _cfg["instruments"]["rp_port"]
 RP_GAIN = _cfg["redpitaya"]["input_gain"]
+IN2_GAIN = _cfg["redpitaya"].get("in2_gain", "HV")
 F_MOD = _cfg["lockin"]["f_mod_hz"]
 D_CENTER_MHZ = _cfg["analysis"]["d_center_mhz"]
 MIN_SEP_MHZ = _cfg["analysis"]["min_sep_mhz"]
 
 CAL_DIR = os.path.join(_cfg["paths"]["data_dir"], "calibration")
 POWER_TABLE = os.path.join(CAL_DIR, "power_calibration.csv")
+PM_CAL_FILE = os.path.join(CAL_DIR, "pm101a_analog_cal.csv")   # mW/V factors
+PM_FULL_SCALE_V = 2.0        # PM101A analog output at full range (see its manual)
 
 DZFS_MHZ_PER_K = -0.074      # zero-field splitting temperature coefficient
 N_BUF = 16384                # Red Pitaya fast-ADC buffer (samples per record)
@@ -182,162 +189,224 @@ def wait_stable(read, period_s=0.5, window_s=10.0, tol_frac=0.005, min_s=20.0,
 
 
 # ---------------------------------------------------------------------------
-# Thorlabs PM101A power meter
+# Thorlabs PM101A power meter, read through its ANALOG OUTPUT on Red Pitaya IN2
 # ---------------------------------------------------------------------------
 class PowerMeter:
-    """Thorlabs PM101A (+ S120C) over USB, or typed in by hand.
+    """Thorlabs PM101A (+ S120C), read through its analog output on Red Pitaya IN2.
 
-    The PM101 series speaks SCPI over USB-TMC. To use it from Python:
-      1. pip install pyvisa
-      2. a VISA library: NI-VISA (install it before Thorlabs' Optical Power
-         Monitor software), or pyvisa-py + pyusb + libusb.
-      3. If the meter does not appear in pyvisa's list_resources(), run the
-         Thorlabs "Power Meter Driver Switcher" and select the NI-VISA driver
-         for the PM101 (the default TLPM driver hides it from other VISA
-         software). Switch back to use Optical Power Monitor again.
-    Check it with cal0_check_power_meter.py.
+    The analog output is a voltage proportional to the sensor photocurrent,
+    scaled to the selected range (about PM_FULL_SCALE_V at full scale). So:
+      * FIX the range (no auto-range: the scale would jump mid-run), with a
+        full scale above the highest power you will measure;
+      * the volts -> mW factor depends on the range, the wavelength
+        correction, the Red Pitaya IN2 front end and its jumper. It is
+        MEASURED by calibrate() against a reading from Thorlabs Optical Power
+        Monitor, and saved in PM_CAL_FILE so later scripts can reuse it while
+        those settings stay the same;
+      * the offset (analog-output offset + ADC offset + room light) is
+        measured with the beam blocked by zero().
 
-    If no meter is found, or manual=True, every reading is TYPED IN instead:
-    the scripts tell you what to read and for how long.
+    Wiring: PM101A analog out -> Red Pitaya IN2, IN2 jumper on HV
+    (config.json redpitaya.in2_gain). LV clips at about 1 V.
+
+    read_v() works from the start; read_mw() is NaN until a factor is known.
+    Pass scope= to share an already open RedPitayaScope (one SCPI connection).
     """
 
-    def __init__(self, wavelength_nm=532.0, resource=None, manual=False,
-                 avg_count=10):
-        self.wavelength_nm = wavelength_nm
-        self.inst = None
-        self.idn = "manual entry"
-        if manual:
-            print("Power meter: MANUAL entry (manual=True).")
-            return
-        try:
-            import pyvisa
-        except ImportError:
-            print("Power meter: pyvisa not installed -> MANUAL entry. "
-                  "(pip install pyvisa; see the PowerMeter docstring.)")
-            return
-        try:
-            rm = pyvisa.ResourceManager()
-            if resource is None:
-                found = [r for r in rm.list_resources() if "0x1313" in r.lower()]
-                if not found:
-                    print("Power meter: no Thorlabs USB instrument in "
-                          f"{rm.list_resources()} -> MANUAL entry. "
-                          "(Driver Switcher -> NI-VISA? See cal0_check_power_meter.py.)")
-                    return
-                resource = found[0]
-            self.inst = rm.open_resource(resource)
-            self.inst.timeout = 5000
-            self.idn = self.inst.query("*IDN?").strip()
-        except Exception as e:
-            print(f"Power meter: could not open it ({e}) -> MANUAL entry.")
-            self.inst = None
-            return
-        print(f"Power meter: {self.idn}  ({resource})")
-        for cmd in ("SENS:POW:UNIT W", "SENS:POW:RANG:AUTO ON",
-                    f"SENS:AVER:COUN {int(avg_count)}", "CONF:POW"):
-            self._try_write(cmd)
-        self.set_wavelength(wavelength_nm)
-        try:
-            print(f"  sensor: {self.inst.query('SYST:SENS:IDN?').strip()}")
-        except Exception:
-            pass
+    def __init__(self, decimation=1024, gain=None, channel=2, scope=None):
+        from redpitaya_scope import RedPitayaScope
+        self._own_scope = scope is None
+        self.scope = scope or RedPitayaScope(RP_IP, RP_PORT)
+        self.decimation = decimation
+        self.gain = gain or IN2_GAIN
+        self.channel = channel
+        self.clip_v = 0.95 if self.gain == "LV" else 19.0
+        self.v_zero = 0.0
+        self.mw_per_v = float("nan")
+        self.pm_range = ""
+        self._warned = set()
+        print(f"Power meter: PM101A analog out on Red Pitaya IN{channel} "
+              f"({RP_IP}:{RP_PORT}), gain {self.gain}, decimation {decimation}")
 
     @property
-    def manual(self):
-        return self.inst is None
+    def calibrated(self):
+        return np.isfinite(self.mw_per_v)
 
-    def _try_write(self, cmd):
-        try:
-            self.inst.write(cmd)
-        except Exception as e:
-            print(f"  WARNING: '{cmd}' failed ({e})")
+    @property
+    def idn(self):
+        return (f"PM101A analog out on RP IN{self.channel} ({self.gain}); "
+                f"range {self.pm_range or '?'}")
 
-    def set_wavelength(self, nm):
-        self.wavelength_nm = nm
-        if self.manual:
-            print(f"  >> Set the PM101A correction wavelength to {nm:.0f} nm.")
-            return
-        self._try_write(f"SENS:CORR:WAV {nm:.1f}")
-        try:
-            got = float(self.inst.query("SENS:CORR:WAV?"))
-            print(f"  wavelength correction = {got:.1f} nm")
-            if abs(got - nm) > 0.5:
-                print(f"  WARNING: asked for {nm:.1f} nm -- set it on the meter.")
-        except Exception:
-            print(f"  (could not read back the wavelength; check it is {nm:.0f} nm)")
+    def meta(self):
+        """Settings for a CSV header."""
+        return dict(power_meter=self.idn, pm_range=self.pm_range or "?",
+                    in2_gain=self.gain, mw_per_v=self.mw_per_v,
+                    v_zero_V=self.v_zero)
 
-    def zero(self):
-        """Dark zero with the beam blocked."""
-        pause("  ZERO: block the beam completely (sensor in place)")
-        if self.manual:
-            pause("  Press the PM101A's Zero function and wait for it to finish")
-            pause("  Unblock the beam")
-            return
-        try:
-            self.inst.write("SENS:CORR:COLL:ZERO:INIT")
-            deadline = time.time() + 30
-            while time.time() < deadline:
-                time.sleep(0.5)
-                if self.inst.query("SENS:CORR:COLL:ZERO:STAT?").strip() in ("0", "OFF"):
-                    break
-            mag = float(self.inst.query("SENS:CORR:COLL:ZERO:MAGN?"))
-            print(f"  zeroed (offset {mag * 1e9:.2f} nW).")
-        except Exception as e:
-            print(f"  WARNING: zeroing over USB failed ({e}); zero it on the meter.")
-            pause("  Zero done on the front panel?")
-        pause("  Unblock the beam")
+    def check_clip(self, x):
+        peak = float(np.max(x))
+        for name, lim, msg in (
+                ("adc", self.clip_v, f"IN{self.channel} may be clipping ({self.gain} "
+                 "range): use the HV jumper"),
+                ("pm", 0.98 * PM_FULL_SCALE_V, "the PM101A analog output is at full "
+                 "scale: choose a higher range and calibrate again")):
+            if peak > lim and name not in self._warned:
+                self._warned.add(name)
+                print(f"\n  WARNING: IN{self.channel} reaches {peak:.3f} V -- {msg}.")
+
+    def read_v(self):
+        """Mean IN2 voltage over one record (offset NOT removed)."""
+        x = self.scope.acquire((self.channel,), self.decimation, self.gain,
+                               fill_timeout_s=5.0)
+        self.check_clip(x)
+        return float(np.mean(x))
+
+    def read_net_v(self):
+        return self.read_v() - self.v_zero
 
     def read_mw(self):
-        """One reading in mW (USB mode only)."""
-        return float(self.inst.query("MEAS:POW?")) * 1e3
+        return self.read_net_v() * self.mw_per_v
+
+    def mean_v(self, seconds):
+        """Mean and std of the raw per-record level over `seconds`."""
+        t0, v = time.time(), []
+        while not v or time.time() - t0 < seconds:
+            v.append(self.read_v())
+        return float(np.mean(v)), float(np.std(v, ddof=1)) if len(v) > 1 else float("nan")
+
+    def zero(self, seconds=3.0, prompt=True):
+        """Offset with the beam blocked. prompt=False: the caller has already
+        asked for the beam to be blocked (and will ask to unblock it)."""
+        if prompt:
+            pause("  ZERO: block the beam completely (sensor in place)")
+        v, s = self.mean_v(seconds)
+        self.v_zero = v
+        print(f"  power meter zero = {v * 1e3:.2f} mV (+/- {s * 1e3:.2f})")
+        if prompt:
+            pause("  Unblock the beam")
+
+    def calibrate(self, seconds=10.0):
+        """Measure mW/V against Optical Power Monitor (beam on and steady, the
+        brighter the better). zero() first. Appends the result to PM_CAL_FILE."""
+        print("  CALIBRATE the analog output against Thorlabs Optical Power Monitor:\n"
+              "    532 nm, a FIXED range (keep it for the whole run), averaging on.")
+        self.pm_range = ask("  range set on the meter (e.g. '5 mW')",
+                            self.pm_range or None)
+        while True:
+            pause(f"  Watch the Optical Power Monitor reading for {seconds:.0f} s, "
+                  "starting now")
+            v, s = self.mean_v(seconds)
+            net = v - self.v_zero
+            print(f"  IN{self.channel}: {net * 1e3:.2f} mV above zero (+/- {s * 1e3:.2f})")
+            p_ref = ask_float("  mean power Optical Power Monitor showed (mW)")
+            if net > 0.02 and p_ref > 0:
+                break
+            print("  the signal is too small to calibrate on (< 20 mV, or P <= 0): "
+                  "use a brighter point or a lower range.")
+            if not ask_yes("  try again?"):
+                raise Stop
+        self.mw_per_v = p_ref / net
+        print(f"  factor = {self.mw_per_v:.6g} mW/V  ->  analog full scale "
+              f"({PM_FULL_SCALE_V:.1f} V) = {self.mw_per_v * PM_FULL_SCALE_V:.4g} mW: "
+              f"should match the range '{self.pm_range}'.")
+        os.makedirs(CAL_DIR, exist_ok=True)
+        new = not os.path.exists(PM_CAL_FILE)
+        with open(PM_CAL_FILE, "a") as f:
+            if new:
+                f.write("# experiment=pm101a_analog_calibration\n"
+                        "created,pm_range,in2_gain,decimation,v_zero_V,v_net_V,"
+                        "v_std_V,P_ref_mW,mw_per_v\n")
+            f.write(",".join(_fmt(x) for x in (
+                datetime.now().isoformat(timespec="seconds"),
+                self.pm_range.replace(",", " "), self.gain, self.decimation,
+                self.v_zero, net, s, p_ref, self.mw_per_v)) + "\n")
+        print(f"  saved to {PM_CAL_FILE}")
+
+    def load_saved(self):
+        """Offer the newest factor in PM_CAL_FILE. True if it was accepted."""
+        if not os.path.exists(PM_CAL_FILE):
+            return False
+        _, c = read_table(PM_CAL_FILE)
+        if not len(c.get("mw_per_v", [])):
+            return False
+        k, gain = float(c["mw_per_v"][-1]), str(c["in2_gain"][-1])
+        rng, when = str(c["pm_range"][-1]), str(c["created"][-1])
+        if gain != self.gain:
+            print(f"  (saved factor is for IN2 {gain}, now {self.gain}: not reused)")
+            return False
+        if not ask_yes(f"  Reuse the saved factor {k:.6g} mW/V ({when}, range {rng})? "
+                       "Only if the range, wavelength and IN2 jumper are unchanged"):
+            return False
+        self.mw_per_v, self.pm_range = k, rng
+        return True
 
     def settle(self, min_s=20.0, max_s=180.0, tol_frac=0.005, window_s=10.0):
-        if self.manual:
-            countdown(min_s, "wait for the TEC / laser to settle")
-            pause("  Reading steady on the PM101A?")
-            return min_s
-        return wait_stable(self.read_mw, 0.5, window_s, tol_frac, min_s, max_s,
-                           unit="mW")
+        if self.calibrated:
+            return wait_stable(self.read_mw, 0.5, window_s, tol_frac, min_s, max_s,
+                               unit="mW")
+        return wait_stable(self.read_net_v, 0.5, window_s, tol_frac, min_s, max_s,
+                           unit="mV", scale=1e3)
 
     def log(self, seconds, period_s=0.2):
-        """Log for `seconds`. Returns dict(mean, std, slope [mW/s], n, t, p)."""
-        if self.manual:
-            print(f"  Watch the PM101A for {seconds:.0f} s.")
-            mean = ask_float("  mean power over that time (mW)")
-            pk = ask_float("  peak-to-peak fluctuation (mW, blank = skip)",
-                           blank_ok=True)
-            std = pk / 6.0 if pk is not None else float("nan")
-            return dict(mean=mean, std=std, slope=float("nan"), n=1,
-                        t=np.array([0.0]), p=np.array([mean]))
+        """Log for `seconds`, one record every >= period_s.
+        Returns dict(mean, std, slope [mW/s], n, t, p [mW], v [V above zero])."""
         t0 = time.time()
-        ts, ps = [], []
-        while time.time() - t0 < seconds:
-            ps.append(self.read_mw())
-            ts.append(time.time() - t0)
-            print(f"\r  logging {ts[-1]:5.1f}/{seconds:.0f} s: {ps[-1]:10.5f} mW ",
+        ts, vs = [], []
+        while not ts or time.time() - t0 < seconds:
+            t_rd = time.time()
+            vs.append(self.read_net_v())
+            ts.append(t_rd - t0)
+            print(f"\r  logging {ts[-1]:5.1f}/{seconds:.0f} s: "
+                  f"{vs[-1] * self.mw_per_v:10.5f} mW ({vs[-1] * 1e3:8.2f} mV) ",
                   end="", flush=True)
-            time.sleep(period_s)
+            time.sleep(max(0.0, period_s - (time.time() - t_rd)))
         print()
-        t, p = np.array(ts), np.array(ps)
+        t, v = np.array(ts), np.array(vs)
+        p = v * self.mw_per_v
         slope = float(np.polyfit(t, p, 1)[0]) if len(t) > 2 else float("nan")
         return dict(mean=float(p.mean()), std=float(p.std(ddof=1)) if len(p) > 1
-                    else float("nan"), slope=slope, n=len(p), t=t, p=p)
+                    else float("nan"), slope=slope, n=len(p), t=t, p=p, v=v)
 
     def close(self):
-        if self.inst is not None:
-            try:
-                self.inst.close()
-            except Exception:
-                pass
+        if self._own_scope:
+            self.scope.close()
 
+
+def prepare_power_meter(pm, cal_ma=None, i_max_ma=None, settle_min_s=20.0,
+                        settle_max_s=180.0, required=True, zeroed=False):
+    """Zero the meter, then get a mW/V factor: reuse the saved one, or calibrate.
+    With cal_ma the user first sets that current (pick the TOP of the run: the
+    largest signal gives the best factor) and the output settles.
+    required=False (power monitor): the factor may be skipped and only volts
+    are then meaningful. zeroed=True: pm.zero() was already done."""
+    if not zeroed:
+        pm.zero()
+    if pm.load_saved():
+        return
+    if not required and not ask_yes("  Calibrate the power meter now (needs "
+                                     "Optical Power Monitor)? No = log volts only",
+                                     default=False):
+        return
+    if cal_ma is not None:
+        print("  calibration point: the brightest current of the run")
+        cur = ask_current(cal_ma, i_max_ma if i_max_ma is not None else cal_ma)
+        if cur is not None:
+            pm.settle(settle_min_s, settle_max_s)
+    pm.calibrate()
 
 # ---------------------------------------------------------------------------
 # Red Pitaya IN1 (PDA10A2 for noise, APD for PL)
 # ---------------------------------------------------------------------------
 class Photodiode:
-    """Raw fast-ADC records from Red Pitaya IN1 via the SCPI server."""
+    """Raw fast-ADC records from Red Pitaya IN1 via the SCPI server.
 
-    def __init__(self, decimation=1024, gain=None, channel=1):
+    monitor=True also reads the PM101A analog output on IN2 (self.pm, a
+    PowerMeter on the same connection) as a laser power monitor: records()
+    then acquires both channels together and leaves the per-record monitor
+    level in self.mon_v (V above zero) and self.mon_mw (NaN without a factor).
+    Zero / calibrate it first with prepare_power_meter(pd.pm, required=False)."""
+
+    def __init__(self, decimation=1024, gain=None, channel=1, monitor=False):
         from redpitaya_scope import RedPitayaScope
         self.scope = RedPitayaScope(RP_IP, RP_PORT)
         self.decimation = decimation
@@ -347,13 +416,30 @@ class Photodiode:
         self.clip_v = 0.95 if self.gain == "LV" else 19.0
         print(f"Red Pitaya IN{channel} at {RP_IP}:{RP_PORT}: decimation "
               f"{decimation} (fs = {self.fs:.0f} Hz), gain {self.gain}")
+        self.pm = PowerMeter(decimation, scope=self.scope) if monitor else None
+        self.mon_v = self.mon_mw = np.array([])
 
     def record(self):
         return self.scope.acquire((self.channel,), self.decimation, self.gain,
                                   fill_timeout_s=5.0)
 
     def records(self, n):
-        recs = np.array([self.record() for _ in range(n)])
+        if self.pm is None:
+            recs = np.array([self.record() for _ in range(n)])
+        else:
+            recs, mon = [], []
+            for _ in range(n):
+                a, b = self.scope.acquire((self.channel, self.pm.channel),
+                                          self.decimation,
+                                          {self.channel: self.gain,
+                                           self.pm.channel: self.pm.gain},
+                                          fill_timeout_s=5.0)
+                self.pm.check_clip(b)
+                recs.append(a)
+                mon.append(float(np.mean(b)) - self.pm.v_zero)
+            recs = np.array(recs)
+            self.mon_v = np.array(mon)
+            self.mon_mw = self.mon_v * self.pm.mw_per_v
         peak = float(np.max(np.abs(recs)))
         if peak > self.clip_v:
             print(f"  WARNING: |V| reaches {peak:.3f} V -- IN1 may be clipping "
@@ -375,8 +461,10 @@ class Photodiode:
 
 def live_dc_monitor(pd, target_v=None, tol_frac=None):
     """Show the IN1 DC level live while the user adjusts the attenuation.
+    `pd` is a Photodiode, or any function returning a level in V.
     Windows: updates until any key is pressed. Elsewhere: Enter re-reads,
     'a' accepts. Returns the last DC level."""
+    read = getattr(pd, "dc", pd)
     try:
         import msvcrt
     except ImportError:
@@ -394,7 +482,7 @@ def live_dc_monitor(pd, target_v=None, tol_frac=None):
     if msvcrt is not None:
         print("  Adjust the attenuation; press any key when done.")
         while True:
-            v = pd.dc()
+            v = read()
             print("\r" + line(v), end="", flush=True)
             if msvcrt.kbhit():
                 while msvcrt.kbhit():
@@ -402,7 +490,7 @@ def live_dc_monitor(pd, target_v=None, tol_frac=None):
                 print()
                 return v
     while True:
-        v = pd.dc()
+        v = read()
         print(line(v))
         if input("  Enter = read again, a = accept: ").strip().lower() == "a":
             return v
