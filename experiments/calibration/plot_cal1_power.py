@@ -10,12 +10,14 @@ settings):
 
 What it computes:
   * the transmission of each measured stage (laser -> objective, objective,
-    and the fibre if after_fibre was measured) and T_obj = P_after_objective / P_before_objective, averaged over the currents;
-  * the 532 nm fraction f532 = (P_bandpass / T_bandpass) / P_open at each
-    bandpass position (1.00 = no infrared on the sensor);
-  * P_sample(I) = P_before_objective(I) * f532(before_objective) * T_obj,
-    averaging the up and down sweeps; the error bar combines the logged
-    scatter, half the up/down difference and the T_obj spread;
+    and the fibre if after_fibre was measured) and T_obj = P_after_objective /
+    P_before_objective, averaged over the loss-budget currents where both
+    positions were measured and the laser is lasing (above LASING_FRAC of the
+    max power; below threshold both readings are ~0 and the ratio is noise);
+  * P_sample(I) = P_before_objective(I) * T_obj, averaging the up and down
+    sweeps; the error bar combines the logged scatter, half the up/down
+    difference and the T_obj spread. The 532 nm bandpass is in the beam for
+    every reading, so no infrared correction is applied;
   * hysteresis (up - down), relative power fluctuation, path-transmission ratio
     (before_objective / laser_output) vs current, TEC temperature vs current, and a linear-extrapolated threshold.
 
@@ -31,40 +33,55 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from calib_common import cal_dir_from_argv, latest, meta_float, read_table
+from calib_common import cal_dir_from_argv, latest, read_table
 
 # --- settings ---------------------------------------------------------------
 FILE_BUDGET = None     # None -> newest loss_budget_*.csv
 FILE_SWEEP = None      # None -> newest power_vs_current_before_objective_*.csv
 FILE_LASER = None      # None -> newest power_vs_current_laser_output_*.csv
 T_OBJ_OVERRIDE = None  # e.g. 0.62 to force the objective transmission
-APPLY_IR_CORRECTION = True
 THRESH_FIT_FRAC = 0.5  # fit a line to points above this fraction of the max power
+LASING_FRAC = 0.05     # stage ratios only where P > this fraction of the max power
+SAME_CURRENT_MA = 1.0  # typed currents closer than this are the same set point
 
 # beam path order; positions not measured are skipped (no fibre fitted yet)
 CHAIN = ["laser_output", "after_fibre", "before_objective", "after_objective"]
 
 
-def stage_ratios(budget):
-    """{(position, current): P_open}, {position: f532 list}, per-current ratios."""
-    pos, cur, filt, p = (budget["position"], budget["current_mA"],
-                         budget["filter"], budget["P_mW"])
-    open_p = {(a, round(c, 2)): v for a, c, f, v in zip(pos, cur, filt, p) if f == "none"}
-    bp_p = {(a, round(c, 2)): v for a, c, f, v in zip(pos, cur, filt, p) if f == "bp532"}
-    return open_p, bp_p
+def snap_currents(cur, tol=SAME_CURRENT_MA):
+    """Map each typed current to one value per set point (the mean of a cluster
+    of readings closer than tol), so 20.03 mA (up) and 20.11 mA (down), or the
+    same current typed at two positions, count as one current."""
+    cur = np.asarray(cur, float)
+    order = np.argsort(cur)
+    out = np.empty_like(cur)
+    start = 0
+    for k in range(1, len(cur) + 1):
+        if k == len(cur) or cur[order[k]] - cur[order[k - 1]] > tol:
+            grp = order[start:k]
+            out[grp] = round(float(cur[grp].mean()), 2)
+            start = k
+    return out
+
+
+def budget_readings(budget):
+    """{(position, current): P_mW}. Separate "bp532" rows of old files are skipped."""
+    cur = snap_currents(budget["current_mA"])
+    return {(a, c): v for a, c, f, v in
+            zip(budget["position"], cur, budget["filter"],
+                budget["P_mW"]) if f != "bp532"}
 
 
 def summarise_budget(budget_path, lines):
-    meta, b = read_table(budget_path)
-    t_bp = meta_float(meta, "bp_T532", 1.0)
-    open_p, bp_p = stage_ratios(b)
-    currents = sorted({c for _, c in open_p})
-    chain = [p for p in CHAIN if any(k[0] == p for k in open_p)]
+    _, b = read_table(budget_path)
+    p = budget_readings(b)
+    currents = sorted({c for _, c in p})
+    chain = [q for q in CHAIN if any(k[0] == q for k in p)]
     lines += [f"LOSS BUDGET ({os.path.basename(budget_path)})",
               "  current   " + "".join(f"{c:>18s}" for c in chain)]
     for c in currents:
         lines.append(f"  {c:7.2f}   " + "".join(
-            f"{open_p.get((pos, c), np.nan):15.4f} mW" for pos in chain))
+            f"{p.get((pos, c), np.nan):15.4f} mW" for pos in chain))
     ratios = {}
     names = {("laser_output", "after_fibre"): "fibre coupling",
              ("before_objective", "after_objective"): "objective T_obj"}
@@ -73,29 +90,31 @@ def summarise_budget(budget_path, lines):
     if len(chain) > 2:
         stages.append((chain[0], chain[-1], "total"))
     for a, z, name in stages:
-        r = np.array([open_p[(z, c)] / open_p[(a, c)] for c in currents
-                      if (a, c) in open_p and (z, c) in open_p and open_p[(a, c)] > 0])
+        p_min = LASING_FRAC * max(v for (q, _), v in p.items() if q == a)
+        used = [c for c in currents
+                if (a, c) in p and (z, c) in p and p[(a, c)] > p_min]
+        r = np.array([p[(z, c)] / p[(a, c)] for c in used])
         ratios[name] = r
         if r.size:
             lines.append(f"  {name:34s}: {r.mean():.3f} +/- {r.std():.3f}  "
-                         f"(per current: {', '.join(f'{x:.3f}' for x in r)})")
-    f532 = {}
-    for (pos, c), v in bp_p.items():
-        if (pos, c) in open_p and open_p[(pos, c)] > 0:
-            f532.setdefault(pos, []).append(v / t_bp / open_p[(pos, c)])
-    lines.append(f"  532 nm fraction (bandpass T = {t_bp:.2f}):")
-    for pos, fr in f532.items():
-        fr = np.array(fr)
-        flag = "  <-- INFRARED on the sensor" if abs(fr.mean() - 1) > 0.03 else ""
-        lines.append(f"    {pos:18s}: {fr.mean():.3f} +/- {fr.std():.3f}{flag}")
-    return ratios, {k: np.array(v) for k, v in f532.items()}, open_p
+                         f"({r.size} currents: " + ", ".join(
+                             f"{c:.0f} mA {x:.3f}" for c, x in zip(used, r)) + ")")
+            if r.mean() > 1:
+                lines.append("    WARNING: transmission > 1 is impossible: the sensor "
+                             "clipped or missed part of the beam at the first "
+                             "position, or the zero changed between positions.")
+        else:
+            lines.append(f"  {name:34s}: no current with both positions above "
+                         f"{p_min:.3g} mW")
+    return ratios, p
 
 
 def combine_up_down(c):
     """Per current: mean of up/down, error, hysteresis %, rel std %, TEC."""
     out = {}
-    for cur in np.unique(np.round(c["current_mA"], 2)):
-        m = np.isclose(c["current_mA"], cur, atol=0.005)
+    snapped = snap_currents(c["current_mA"])
+    for cur in np.unique(snapped):
+        m = snapped == cur
         up = m & (c["direction"] == "up")
         dn = m & (c["direction"] == "down")
         p, s = c["P_mW"][m], c["P_std_mW"][m]
@@ -123,15 +142,13 @@ def main():
                          "run cal1_power_vs_current.py first.")
     lines = []
 
-    t_obj, t_obj_err, f532_before = 1.0, 0.0, 1.0
+    t_obj, t_obj_err = 1.0, 0.0
     budget_open = {}
     if f_budget:
-        ratios, f532, budget_open = summarise_budget(f_budget, lines)
+        ratios, budget_open = summarise_budget(f_budget, lines)
         if ratios.get("objective T_obj", np.array([])).size:
             t_obj = float(ratios["objective T_obj"].mean())
             t_obj_err = float(ratios["objective T_obj"].std())
-        if APPLY_IR_CORRECTION and "before_objective" in f532:
-            f532_before = float(f532["before_objective"].mean())
     else:
         lines.append("NO LOSS BUDGET FOUND: T_obj = 1 (the table is then power "
                      "BEFORE the objective). Run cal1_loss_budget.py.")
@@ -147,9 +164,12 @@ def main():
     hyst = np.array([per[i]["hyst"] for i in cur])
     rel = np.array([per[i]["rel"] for i in cur])
     tec = np.array([per[i]["tec"] for i in cur])
-    k = f532_before * t_obj
+    # below threshold P ~ 0: the relative hysteresis and scatter are meaningless
+    dark = p_before < LASING_FRAC * p_before.max()
+    hyst[dark], rel[dark] = np.nan, np.nan
+    k = t_obj
     p_sample = p_before * k
-    e_sample = np.sqrt((e_before * k) ** 2 + (p_before * f532_before * t_obj_err) ** 2)
+    e_sample = np.sqrt((e_before * k) ** 2 + (p_before * t_obj_err) ** 2)
 
     # linear-extrapolated threshold from the upper part of the curve
     sel = p_before >= THRESH_FIT_FRAC * p_before.max()
@@ -176,16 +196,14 @@ def main():
     with open(os.path.join(cal_dir, "power_calibration.csv"), "w") as f:
         f.write(f"# experiment=power_calibration\n# sweep={os.path.basename(f_sweep)}\n"
                 f"# loss_budget={os.path.basename(f_budget) if f_budget else 'none'}\n"
-                f"# T_obj={t_obj:.5f}\n# T_obj_err={t_obj_err:.5f}\n"
-                f"# f532_before_objective={f532_before:.5f}\n")
+                f"# T_obj={t_obj:.5f}\n# T_obj_err={t_obj_err:.5f}\n")
         f.write("current_mA,P_sample_mW,P_sample_err_mW,P_before_mW,hysteresis_pct,"
                 "rel_std_pct,tec_C\n")
         for row in zip(cur, p_sample, e_sample, p_before, hyst, rel, tec):
             f.write(",".join(f"{v:.6g}" for v in row) + "\n")
 
     lines += ["", f"POWER vs CURRENT ({os.path.basename(f_sweep)})",
-              f"  P_sample = P_before x f532 ({f532_before:.3f}) x T_obj "
-              f"({t_obj:.3f} +/- {t_obj_err:.3f})",
+              f"  P_sample = P_before x T_obj ({t_obj:.3f} +/- {t_obj_err:.3f})",
               "   I (mA)   P_before (mW)   P_sample (mW)    hyst %   std %   TEC C"]
     for row in zip(cur, p_before, p_sample, e_sample, hyst, rel, tec):
         lines.append("  {:7.2f}   {:12.4f}   {:9.4f}+/-{:<7.4f} {:7.2f} {:7.2f} {:7.2f}"

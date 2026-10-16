@@ -23,8 +23,8 @@ Power meter: the PM101A analog output on Red Pitaya IN2 (see
 cal0_check_power_meter.py), set BY HAND to 532 nm and a FIXED range covering
 the top current. At the start it is zeroed with the beam blocked, then the
 saved mW/V factor is reused or measured at the top current against Optical
-Power Monitor. Do cal1_loss_budget.py first so the infrared check and T_obj
-exist.
+Power Monitor. Do cal1_loss_budget.py first so T_obj exists. Keep the 532 nm
+bandpass in the beam, as in the loss budget.
 
 Output: <data_dir>/calibration/
           power_vs_current_<POSITION>_<stamp>.csv       one row per current step
@@ -39,16 +39,16 @@ Run on the PC:  python cal1_power_vs_current.py
 
 from calib_common import (PowerMeter, Stop, TableWriter, ask_current, ask_tec,
                           cal_path, pause, prepare_power_meter, stamp)
+import numpy as np
 
 # --- settings ---------------------------------------------------------------
 POSITION = "before_objective"    # or "laser_output" (optional path-transmission check)
-CURRENTS_MA = [120.0, 125.0, 128.0, 130.0, 132.0, 134.0, 136.0, 138.0,
-               140.0, 142.0, 145.0, 147.0]      # dense near threshold (~130 mA)
+CURRENTS_MA = np.arange(0, 280, 20).tolist()  # dense near threshold (~130 mA)
 SWEEP_DOWN = True                # then back down for the hysteresis check
-I_MAX_MA = 150.0                 # never ask for more (set to your LDC200C limit)
-LOG_S = 45.0                     # 30-60 s of logging per current
+I_MAX_MA = 280.0                 # never ask for more (set to your LDC200C limit)
+LOG_S = 20.0                     # 30-60 s of logging per current
 LOG_PERIOD_S = 0.2
-SETTLE_MIN_S, SETTLE_MAX_S = 30.0, 300.0
+SETTLE_MIN_S, SETTLE_MAX_S = 5.0, 300.0
 SETTLE_TOL = 0.005               # stable = < 0.5 % drift over 10 s
 WAVELENGTH_NM = 532.0            # set on the PM101A; recorded only
 

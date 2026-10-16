@@ -49,10 +49,27 @@ MIN_SEP_MHZ = _cfg["analysis"]["min_sep_mhz"]
 CAL_DIR = os.path.join(_cfg["paths"]["data_dir"], "calibration")
 POWER_TABLE = os.path.join(CAL_DIR, "power_calibration.csv")
 PM_CAL_FILE = os.path.join(CAL_DIR, "pm101a_analog_cal.csv")   # mW/V factors
-PM_FULL_SCALE_V = 2.0        # PM101A analog output at full range (see its manual)
+# PM101A analog output in responsivity mode: V = P x responsivity (set on the
+# meter, "AO responsivity"), independent of the range. The factor is still
+# MEASURED against Optical Power Monitor; this nominal value is the cross-check.
+PM_RESPONSIVITY_V_PER_W = _cfg["redpitaya"].get("pm_ao_responsivity_v_per_w")
+# settled if the drift over 10 s is below this many volts, even near zero power:
+# a few times the per-reading noise on each IN2 range
+PM_SETTLE_FLOOR_V = {"LV": 0.5e-3, "HV": 5e-3}
+
+MAINS_HZ = 50.0              # mains frequency: DC levels average whole cycles of it
 
 DZFS_MHZ_PER_K = -0.074      # zero-field splitting temperature coefficient
 N_BUF = 16384                # Red Pitaya fast-ADC buffer (samples per record)
+
+
+def mains_mean(x, fs):
+    """Mean of x over the largest whole number of mains cycles in the record, so
+    50/100 Hz hum averages out instead of leaking into the DC level (a 134 ms
+    record holds 6.7 cycles; a partial cycle makes the mean jump record to
+    record). Falls back to the plain mean for records shorter than a cycle."""
+    n = int(round(int(len(x) * MAINS_HZ / fs) * fs / MAINS_HZ))
+    return float(np.mean(x[:n] if n > 0 else x))
 
 
 def cal_path(name):
@@ -152,11 +169,13 @@ def countdown(seconds, msg="waiting"):
 
 
 def wait_stable(read, period_s=0.5, window_s=10.0, tol_frac=0.005, min_s=20.0,
-                max_s=180.0, unit="", scale=1.0):
+                max_s=180.0, unit="", scale=1.0, abs_tol=0.0):
     """Read `read()` repeatedly until the drift over the last `window_s` seconds
-    (linear fit) is below tol_frac of the mean, after at least min_s. Gives up
-    with a warning after max_s. Ctrl-C stops waiting early. Returns the elapsed
-    time. Used to let the TEC and the DPSS output settle after a current step."""
+    (linear fit) is below tol_frac of the mean, or below abs_tol (same units as
+    read()) -- the floor that lets a reading near zero, e.g. below the laser
+    threshold, count as stable -- after at least min_s. Gives up with a
+    warning after max_s. Ctrl-C stops waiting early. Returns the elapsed time.
+    Used to let the TEC and the DPSS output settle after a current step."""
     t0 = time.time()
     ts, vs = [], []
     try:
@@ -166,16 +185,16 @@ def wait_stable(read, period_s=0.5, window_s=10.0, tol_frac=0.005, min_s=20.0,
             ts.append(t)
             vs.append(v)
             keep = [i for i, ti in enumerate(ts) if ti >= t - window_s]
-            drift = float("nan")
+            change, limit = float("nan"), float("nan")
             tt, vv = np.array(ts)[keep], np.array(vs)[keep]
             if len(keep) >= 4 and np.ptp(tt) > 0.5 and np.all(np.isfinite(vv)):
                 slope = np.polyfit(tt - tt.mean(), vv, 1)[0]
-                mean = abs(vv.mean())
-                drift = abs(slope) * window_s / mean if mean > 0 else float("inf")
+                change = abs(slope) * window_s
+                limit = max(tol_frac * abs(vv.mean()), abs_tol)
             print(f"\r  settling {t:5.0f} s: {v * scale:10.4g} {unit}   drift over "
-                  f"{window_s:.0f} s = {100 * drift:6.2f} % (target "
-                  f"{100 * tol_frac:.2f} %)   ", end="", flush=True)
-            if t >= min_s and drift <= tol_frac:
+                  f"{window_s:.0f} s = {change * scale:8.3g} {unit} (target < "
+                  f"{limit * scale:.3g} {unit})   ", end="", flush=True)
+            if t >= min_s and change <= limit:
                 print("\n  stable.")
                 return t
             if t >= max_s:
@@ -194,20 +213,21 @@ def wait_stable(read, period_s=0.5, window_s=10.0, tol_frac=0.005, min_s=20.0,
 class PowerMeter:
     """Thorlabs PM101A (+ S120C), read through its analog output on Red Pitaya IN2.
 
-    The analog output is a voltage proportional to the sensor photocurrent,
-    scaled to the selected range (about PM_FULL_SCALE_V at full scale). So:
-      * FIX the range (no auto-range: the scale would jump mid-run), with a
-        full scale above the highest power you will measure;
-      * the volts -> mW factor depends on the range, the wavelength
-        correction, the Red Pitaya IN2 front end and its jumper. It is
-        MEASURED by calibrate() against a reading from Thorlabs Optical Power
-        Monitor, and saved in PM_CAL_FILE so later scripts can reuse it while
-        those settings stay the same;
+    The analog output (responsivity mode) is V = P x the "AO responsivity"
+    set in Optical Power Monitor (1 mV/W .. 1 kV/W), independent of the range.
+    So:
+      * choose the responsivity so the HIGHEST power gives ~0.7-0.9 V on the LV
+        jumper (e.g. 15 V/W for 50 mW), record it in config.json
+        redpitaya.pm_ao_responsivity_v_per_w, and keep it for the whole run;
+      * the volts -> mW factor (nominally 1000 / responsivity mW/V) also depends
+        on the wavelength correction and the Red Pitaya IN2 front end. It is
+        MEASURED by calibrate() against Optical Power Monitor, compared with the
+        nominal value, and saved in PM_CAL_FILE for later scripts;
       * the offset (analog-output offset + ADC offset + room light) is
         measured with the beam blocked by zero().
 
-    Wiring: PM101A analog out -> Red Pitaya IN2, IN2 jumper on HV
-    (config.json redpitaya.in2_gain). LV clips at about 1 V.
+    Wiring: PM101A analog out -> Red Pitaya IN2, jumper and config.json
+    redpitaya.in2_gain matching (LV: +/- 1 V, ~20x finer steps; HV: +/- 20 V).
 
     read_v() works from the start; read_mw() is NaN until a factor is known.
     Pass scope= to share an already open RedPitayaScope (one SCPI connection).
@@ -221,6 +241,7 @@ class PowerMeter:
         self.gain = gain or IN2_GAIN
         self.channel = channel
         self.clip_v = 0.95 if self.gain == "LV" else 19.0
+        self.fs = 125e6 / decimation
         self.v_zero = 0.0
         self.mw_per_v = float("nan")
         self.pm_range = ""
@@ -245,21 +266,22 @@ class PowerMeter:
 
     def check_clip(self, x):
         peak = float(np.max(x))
-        for name, lim, msg in (
-                ("adc", self.clip_v, f"IN{self.channel} may be clipping ({self.gain} "
-                 "range): use the HV jumper"),
-                ("pm", 0.98 * PM_FULL_SCALE_V, "the PM101A analog output is at full "
-                 "scale: choose a higher range and calibrate again")):
-            if peak > lim and name not in self._warned:
-                self._warned.add(name)
-                print(f"\n  WARNING: IN{self.channel} reaches {peak:.3f} V -- {msg}.")
+        if peak > self.clip_v and "adc" not in self._warned:
+            self._warned.add("adc")
+            print(f"\n  WARNING: IN{self.channel} reaches {peak:.3f} V -- clipping on "
+                  f"the {self.gain} range: LOWER the AO responsivity on the meter "
+                  "(then calibrate again), or use the HV jumper.")
 
     def read_v(self):
-        """Mean IN2 voltage over one record (offset NOT removed)."""
-        x = self.scope.acquire((self.channel,), self.decimation, self.gain,
-                               fill_timeout_s=5.0)
+        """Mean IN2 voltage over whole mains cycles of one record (offset NOT
+        removed)."""
+        x = self.record()
         self.check_clip(x)
-        return float(np.mean(x))
+        return mains_mean(x, self.fs)
+
+    def record(self):
+        return self.scope.acquire((self.channel,), self.decimation, self.gain,
+                                  fill_timeout_s=5.0)
 
     def read_net_v(self):
         return self.read_v() - self.v_zero
@@ -289,9 +311,11 @@ class PowerMeter:
         """Measure mW/V against Optical Power Monitor (beam on and steady, the
         brighter the better). zero() first. Appends the result to PM_CAL_FILE."""
         print("  CALIBRATE the analog output against Thorlabs Optical Power Monitor:\n"
-              "    532 nm, a FIXED range (keep it for the whole run), averaging on.")
-        self.pm_range = ask("  range set on the meter (e.g. '5 mW')",
-                            self.pm_range or None)
+              "    532 nm, AO responsivity FIXED (keep it for the whole run), "
+              "averaging on.")
+        resp = ask_float("  AO responsivity set on the meter (V/W)",
+                         PM_RESPONSIVITY_V_PER_W)
+        self.pm_range = f"AO {resp:g} V/W"
         while True:
             pause(f"  Watch the Optical Power Monitor reading for {seconds:.0f} s, "
                   "starting now")
@@ -302,13 +326,20 @@ class PowerMeter:
             if net > 0.02 and p_ref > 0:
                 break
             print("  the signal is too small to calibrate on (< 20 mV, or P <= 0): "
-                  "use a brighter point or a lower range.")
+                  "use a brighter point or a higher AO responsivity.")
             if not ask_yes("  try again?"):
                 raise Stop
         self.mw_per_v = p_ref / net
-        print(f"  factor = {self.mw_per_v:.6g} mW/V  ->  analog full scale "
-              f"({PM_FULL_SCALE_V:.1f} V) = {self.mw_per_v * PM_FULL_SCALE_V:.4g} mW: "
-              f"should match the range '{self.pm_range}'.")
+        nominal = 1000.0 / resp if resp else float("nan")
+        ratio = self.mw_per_v / nominal
+        print(f"  factor = {self.mw_per_v:.6g} mW/V  (nominal for {resp:g} V/W: "
+              f"{nominal:.6g} mW/V, measured / nominal = {ratio:.3f})")
+        if not 0.9 < ratio < 1.1:
+            print("  WARNING: more than 10 % from nominal. Check that the cable is on "
+                  "the analog output you configured, that the IN2 jumper matches "
+                  f"config.json in2_gain ({self.gain}; a mismatch gives ~x20), and "
+                  "the Optical Power Monitor reading.")
+        print(f"  full scale before IN2 clips: ~{self.clip_v * self.mw_per_v:.4g} mW")
         os.makedirs(CAL_DIR, exist_ok=True)
         new = not os.path.exists(PM_CAL_FILE)
         with open(PM_CAL_FILE, "a") as f:
@@ -334,18 +365,21 @@ class PowerMeter:
         if gain != self.gain:
             print(f"  (saved factor is for IN2 {gain}, now {self.gain}: not reused)")
             return False
-        if not ask_yes(f"  Reuse the saved factor {k:.6g} mW/V ({when}, range {rng})? "
-                       "Only if the range, wavelength and IN2 jumper are unchanged"):
+        if not ask_yes(f"  Reuse the saved factor {k:.6g} mW/V ({when}, {rng})? Only if "
+                       "the AO responsivity, wavelength and IN2 jumper are unchanged"):
             return False
         self.mw_per_v, self.pm_range = k, rng
         return True
 
     def settle(self, min_s=20.0, max_s=180.0, tol_frac=0.005, window_s=10.0):
+        # absolute floor: near zero power (below threshold) tol_frac of the mean
+        # is below the noise and would never be reached
+        floor_v = PM_SETTLE_FLOOR_V.get(self.gain, 5e-3)
         if self.calibrated:
             return wait_stable(self.read_mw, 0.5, window_s, tol_frac, min_s, max_s,
-                               unit="mW")
+                               unit="mW", abs_tol=floor_v * self.mw_per_v)
         return wait_stable(self.read_net_v, 0.5, window_s, tol_frac, min_s, max_s,
-                           unit="mV", scale=1e3)
+                           unit="mV", scale=1e3, abs_tol=floor_v)
 
     def log(self, seconds, period_s=0.2):
         """Log for `seconds`, one record every >= period_s.
@@ -436,7 +470,7 @@ class Photodiode:
                                           fill_timeout_s=5.0)
                 self.pm.check_clip(b)
                 recs.append(a)
-                mon.append(float(np.mean(b)) - self.pm.v_zero)
+                mon.append(mains_mean(b, self.fs) - self.pm.v_zero)
             recs = np.array(recs)
             self.mon_v = np.array(mon)
             self.mon_mw = self.mon_v * self.pm.mw_per_v
@@ -641,3 +675,53 @@ def fit_odmr(freqs, sig, n_lines=2, min_sep_mhz=MIN_SEP_MHZ):
                         contrast_err=float(e_amp / abs(b0))))
     out.sort(key=lambda d: d["f0"])
     return dict(lines=out, model=lambda x: _dips(x, f_mid, *p))
+
+
+def fit_odmr_fixed(freqs, sig, centres, hw_grid=None):
+    """Lorentzian dips at KNOWN centres (from a strong reference spectrum),
+    one shared half-width scanned over hw_grid; baseline, slope and the
+    amplitudes are linear, so this never wanders onto noise and still returns
+    an honest contrast +/- error for a weak or absent dip. Returns a dict with
+    contrast (mean over the lines), contrast_err, fwhm, fwhm_err (Delta chi^2
+    = 1 on the grid), per-line contrasts and the model; None if too few points."""
+    f, y = np.asarray(freqs, float), np.asarray(sig, float)
+    ok = np.isfinite(y)
+    f, y = f[ok], y[ok]
+    n_l = len(centres)
+    if len(f) < n_l + 4:
+        return None
+    if hw_grid is None:
+        # a FWHM below two frequency steps is not resolved by the sweep
+        hw_min = max(0.25, float(np.median(np.diff(np.sort(f)))))
+        hw_grid = np.linspace(hw_min, 6.0, 70)
+    f_mid = float(f.mean())
+    best, chis = None, []
+    for hw in hw_grid:
+        X = np.column_stack([np.ones_like(f), f - f_mid] +
+                            [-1.0 / (1.0 + ((f - c) / hw) ** 2) for c in centres])
+        p, *_ = np.linalg.lstsq(X, y, rcond=None)
+        chi = float(np.sum((y - X @ p) ** 2))
+        chis.append(chi)
+        if best is None or chi < best[0]:
+            best = (chi, hw, p, X)
+    chi, hw, p, X = best
+    dof = max(1, len(f) - X.shape[1])
+    s2 = chi / dof
+    cov = s2 * np.linalg.pinv(X.T @ X)
+    base = p[0]
+    amps, a_cov = p[2:], cov[2:, 2:]
+    c_lines = amps / base
+    c_mean = float(np.mean(c_lines))
+    c_err = float(np.sqrt(np.sum(a_cov)) / n_l / abs(base))
+    inside = np.array(hw_grid)[np.array(chis) / s2 <= chi / s2 + 1.0]
+    fwhm_err = float(inside.max() - inside.min()) if inside.size > 1 else float("nan")
+
+    def model(x):
+        x = np.asarray(x, float)
+        out = p[0] + p[1] * (x - f_mid)
+        for a, c in zip(amps, centres):
+            out = out - a / (1.0 + ((x - c) / hw) ** 2)
+        return out
+    return dict(contrast=c_mean, contrast_err=c_err, fwhm=float(2 * hw),
+                fwhm_err=fwhm_err, contrasts=[float(v) for v in c_lines],
+                base=float(base), model=model, noise=float(np.sqrt(s2)))

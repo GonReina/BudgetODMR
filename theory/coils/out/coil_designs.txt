@@ -1,0 +1,52 @@
+
+== zf_scan_Z: 6 mT at the centre ==
+  bore r_in 30 mm (diameter 60 mm), outer r 39.9 mm, winding 9.9 x 9.9 mm
+  wire 1.0 mm Cu (1.10 mm enamelled), 9 layers x 9 turns = 81 turns per coil
+  spacing 35.1 mm centre-centre (d2B/dz2 = 0);  2.076 mT/A
+  current 2.89 A (3.7 A/mm2), 2.6 V, 7.5 W for the pair, R 0.78 ohm cold / 0.89 hot
+  wire 36 m for the pair (250 g Cu)
+  winding temperature (still air, h=12): 58 C
+  inductance 1.47 mH, L/R 1.65 ms, f_3dB 96.6 Hz
+  modulation at 1000 Hz: 4.5 V per mT amplitude; 12 V drive -> 2.678 mT
+  homogeneity: 1.3e-06 (0.01 uT) over a 2.0 mm cube; 1e-3 region 12.2 mm (axis) x 15.3 mm (dia); 1e-2 region 22.1 x 26.5 mm
+
+== zf_transverse_X: 2 mT at the centre ==
+  bore r_in 45 mm (diameter 90 mm), outer r 52.1 mm, winding 7.1 x 7.1 mm
+  wire 0.8 mm Cu (0.88 mm enamelled), 8 layers x 8 turns = 64 turns per coil
+  spacing 48.6 mm centre-centre (d2B/dz2 = 0);  1.185 mT/A
+  current 1.69 A (3.4 A/mm2), 2.4 V, 4.1 W for the pair, R 1.34 ohm cold / 1.45 hot
+  wire 39 m for the pair (176 g Cu)
+  winding temperature (still air, h=12): 42 C
+  inductance 1.61 mH, L/R 1.11 ms, f_3dB 143.9 Hz
+  homogeneity: 3.5e-07 (0.00 uT) over a 2.0 mm cube; 1e-3 region 16.9 mm (axis) x 21.1 mm (dia); 1e-2 region 30.5 x 36.7 mm
+
+== zf_transverse_Y: 2 mT at the centre ==
+  bore r_in 60 mm (diameter 120 mm), outer r 68.0 mm, winding 8.0 x 8.0 mm
+  wire 0.8 mm Cu (0.88 mm enamelled), 9 layers x 9 turns = 81 turns per coil
+  spacing 64.0 mm centre-centre (d2B/dz2 = 0);  1.138 mT/A
+  current 1.76 A (3.5 A/mm2), 4.3 V, 7.6 W for the pair, R 2.23 ohm cold / 2.46 hot
+  wire 65 m for the pair (293 g Cu)
+  winding temperature (still air, h=12): 47 C
+  inductance 3.55 mH, L/R 1.44 ms, f_3dB 110.3 Hz
+  homogeneity: 1.2e-07 (0.00 uT) over a 2.0 mm cube; 1e-3 region 22.3 mm (axis) x 27.9 mm (dia); 1e-2 region 40.2 x 48.5 mm
+
+== zf_modulation: 0.5 mT at the centre ==
+  bore r_in 20 mm (diameter 40 mm), outer r 22.2 mm, winding 2.2 x 2.2 mm
+  wire 0.5 mm Cu (0.56 mm enamelled), 4 layers x 4 turns = 16 turns per coil
+  spacing 21.1 mm centre-centre (d2B/dz2 = 0);  0.681 mT/A
+  current 0.73 A (3.7 A/mm2), 0.3 V, 0.2 W for the pair, R 0.37 ohm cold / 0.39 hot
+  wire 4 m for the pair (7 g Cu)
+  winding temperature (still air, h=12): 29 C
+  inductance 0.05 mH, L/R 0.12 ms, f_3dB 1275.4 Hz
+  modulation at 1000 Hz: 0.7 V per mT amplitude; 12 V drive -> 16.677 mT
+  homogeneity: 9.8e-06 (0.00 uT) over a 2.0 mm cube; 1e-3 region 7.3 mm (axis) x 9.2 mm (dia); 1e-2 region 13.3 x 16.1 mm
+
+== bias_200mT: 200 mT at the centre ==
+  bore r_in 15 mm (diameter 30 mm), outer r 115.0 mm, winding 100.0 x 100.0 mm
+  wire 1.5 mm Cu (1.64 mm enamelled), 61 layers x 61 turns = 3721 turns per coil
+  spacing 102.0 mm centre-centre (windings touching: thicker than Helmholtz allows);  38.143 mT/A
+  current 5.24 A (3.0 A/mm2), 155.2 V, 813.6 W for the pair, R 29.59 ohm cold / 29.59 hot  (cold: kept at 20 C)
+  wire 3040 m for the pair (48139 g Cu)
+  winding temperature (still air, h=12): RUNAWAY: needs forced/water cooling
+  inductance 2127.82 mH, L/R 71.91 ms, f_3dB 2.2 Hz
+  homogeneity: 1.6e-05 (3.22 uT) over a 2.0 mm cube; 1e-3 region 1.8 mm (axis) x 18.1 mm (dia); 1e-2 region 1.8 x 27.0 mm

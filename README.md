@@ -39,6 +39,8 @@ experiments/
     odmr_smcv100b.py      [RP] SMCV-driven sweep with the script running on the RedPitaya.
     acq_dc_integration_sweep.py  DC sweep at several integration times (data for the lock-in tutorial).
     plot_odmr.py          Plot one ODMR spectrum, mark the resonance dip.
+    odmr_positions_pc.py  6-sweep DC ODMR per diamond position (rotate between positions).
+    plot_odmr_positions.py  One figure per position (error bars) + all positions overlaid.
 
   ac-odmr/       AM lock-in
     odmr_lockin_am_pc.py  Lock-in AM -> line appears as a PEAK.
@@ -50,7 +52,11 @@ experiments/
   fm-odmr/       FM lock-in
     odmr_lockin_fm_pc.py        Lock-in FM (magnitude) -> |derivative|, NULL at centre.
     odmr_lockin_fm_deriv_pc.py  Lock-in FM (phase-sensitive) -> signed derivative, ZERO-CROSSING at centre.
-    odmr_fm_mfli_phase_pc.py    Signed FM detection with the MFLI lock-in (experimental).
+    odmr_fm_mfli_phase_pc.py    Phase-sensitive FM sweep with the MFLI (shared 10 MHz clock) vs a DC sweep.
+    plot_fm_mfli.py             Rotates MFLI X/Y onto the signal; SNR per sweep, FM vs DC.
+    fm_check_pc.py              FM vs DC on/off with the Red Pitaya, over a range of f_mod.
+    plot_fm_check.py            Spectra, pickup check and SNR vs f_mod for fm_check_pc.py.
+    fm_check_explained.md       How fm_check_pc.py works, and the maths behind it.
     acq_fm_tutorial.py          FM demo data for the lock-in tutorial.
 
   calibration/   Connectivity checks, detector / laser noise and characterisation
@@ -88,6 +94,9 @@ theory/          Simulations, calculators, notebooks (most run without hardware)
   nv_odmr.py            NV ground-state spin / CW-ODMR calculator.
   nv_vsystem_cw_sim.py  Coherent V-system CW-ODMR simulation (+ .md write-up, vsystem_sim_out/).
   magnet_field_calc.py  Estimate on-axis magnet field & NV splitting vs distance.
+  coils/                helmholtz_designer.py (turns, wire, power, heat, inductance, homogeneity
+                        of Helmholtz pairs; out/) + coil_plan.md (zero-field experiment coils
+                        and how to drive/modulate them from Python)
   nv_deep_dive_guide.md, nv_quiz.md
   lockin-tutorial/      lockin_odmr_tutorial.ipynb + tutorial_data/ (filled by the acq_*.py scripts above)
   optics/               Optical_Setup.ipynb + optics_model.py, optics_draw.py

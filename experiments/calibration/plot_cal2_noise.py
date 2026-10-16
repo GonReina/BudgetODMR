@@ -61,9 +61,8 @@ def main():
     floors, f_floor = load("noise_floors_*.npz", cal_dir)
     rin, f_rin = load("rin_vs_current_*.npz", cal_dir)
     vph, f_vph = load("noise_vs_photocurrent_*.npz", cal_dir)
-    if rin is None and vph is None:
-        raise SystemExit(f"No rin_vs_current_*.npz or noise_vs_photocurrent_*.npz in "
-                         f"{cal_dir}: run the cal2 scripts first.")
+    if floors is None and rin is None and vph is None:
+        raise SystemExit(f"No cal2 data in {cal_dir}: run the cal2 scripts first.")
     p_of_i, _ = load_power_table(os.path.join(cal_dir, "power_calibration.csv"),
                                  required=False)
     lines = []
@@ -78,6 +77,11 @@ def main():
         for f in F_CANDIDATES_HZ:
             lines.append(f"  {f:7.0f}   {fl['terminated'][2][f] * 1e9:14.1f}   "
                          f"{fl['blocked'][2][f] * 1e9:18.1f}")
+        for name in ("terminated", "blocked"):
+            x = np.asarray(floors[name])
+            lines.append(f"  {name:10s}: DC {x.mean() * 1e3:7.3f} mV, rms "
+                         f"{x.std() * 1e3:.3f} mV, record-to-record DC scatter "
+                         f"{x.mean(axis=1).std() * 1e3:.3f} mV")
         lines.append("")
     else:
         lines.append("NO FLOORS: run cal2_noise_floors.py (needed to read the "

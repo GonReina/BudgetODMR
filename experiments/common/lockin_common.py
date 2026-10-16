@@ -161,6 +161,101 @@ def setup_smcv_modulation(src, mode):
         print(f"  (couldn't toggle modulation over SCPI: {e}; enable it in the menu.)")
 
 
+_BOOL = {"ON": "1", "OFF": "0"}
+
+
+def _same(got, value):
+    """Read-back matches the value sent? Numbers to 0.1 %; ON/OFF also as
+    1/0 (the SMCV answers boolean queries with 1/0); words by their short form
+    (INTernal -> INT)."""
+    got, v = got.strip().strip('"').upper(), str(value).upper()
+    try:
+        return abs(float(got) - float(v)) <= 1e-3 * max(1.0, abs(float(v)))
+    except ValueError:
+        pass
+    if v in _BOOL:
+        return got in (v, _BOOL[v])
+    return got.startswith(v[:3]) or v.startswith(got)
+
+
+def smcv_try(src, sets, value, log=None):
+    """Try SCPI spellings of one setting until the SMCV accepts one: for each
+    (set_cmd, query) in sets, clear the error queue, write "set_cmd value",
+    and accept it if SYSTem:ERRor? reports no error and the query reads back
+    the value. Only writes the setting itself (never the RF level or output).
+    Returns the set_cmd that worked, or None; log (a list) collects why each
+    spelling failed."""
+    for cmd, qry in sets:
+        try:
+            src.s.write("*CLS")
+            src.s.write(f"{cmd} {value}")
+            err = src.s.query(":SYSTem:ERRor?")
+            if not err.startswith("0"):
+                if log is not None:
+                    log.append(f"{cmd} {value} -> {err}")
+                continue
+            got = src.s.query(qry)
+            if _same(got, value):
+                return cmd
+            if log is not None:
+                log.append(f"{cmd} {value} -> read back '{got}'")
+        except Exception as e:
+            if log is not None:
+                log.append(f"{cmd} {value} -> {type(e).__name__}: {e}")
+    return None
+
+
+def _bb(path):
+    """(set, query) spellings of an SMCV baseband 'General' command. On the
+    SMCV100B, AM and FM are NOT the analog [:SOURce]:FM<ch>:STATe / LFOutput
+    tree of the SMBV/SMW manuals (those answer -113 'Undefined header' here):
+    they live under [:SOURce<hw>]:BB:GENeral:{AM|FM}:... (RsSmcv driver docs),
+    with their own modulation frequency (0.1 Hz - 100 kHz)."""
+    return [(f":SOURce1:BB:GENeral:{path}", f":SOURce1:BB:GENeral:{path}?"),
+            (f":SOURce:BB:GENeral:{path}", f":SOURce:BB:GENeral:{path}?")]
+
+
+class SmcvFm:
+    """FM settings over SCPI ([:SOURce]:BB:GENeral:FM:...). Each setter
+    returns True if it was set remotely; False means: do it in the Modulation
+    menu. The working spelling is remembered after the first success."""
+    KIND = "FM"
+
+    def __init__(self, src):
+        self.src = src
+        self.cmd = {}
+        self.failed = []      # why each refused spelling failed (for the printout)
+
+    def _set(self, key, sets, value):
+        if key in self.cmd:
+            sets = [s for s in sets if s[0] == self.cmd[key]]
+        log = []
+        c = smcv_try(self.src, sets, value, log)
+        if c:
+            self.cmd[key] = c
+        else:
+            self.failed += log
+        return c is not None
+
+    def state(self, on):
+        return self._set("state", _bb(f"{self.KIND}:STATe"), "ON" if on else "OFF")
+
+    def shape_sine(self):
+        return self._set("shape", _bb(f"{self.KIND}:SHAPe"), "SINE")
+
+    def deviation_hz(self, hz):
+        """FM deviation, 0 - 4 MHz."""
+        return self._set("dev", _bb("FM:DEViation"), f"{hz:.0f}")
+
+    def lf_freq_hz(self, hz):
+        """Modulation frequency f_mod, 0.1 Hz - 100 kHz."""
+        return self._set("lf", _bb(f"{self.KIND}:FREQuency"), f"{hz:.3f}")
+
+    def report(self):
+        ok = ", ".join(f"{k}: {v}" for k, v in self.cmd.items()) or "nothing"
+        return ok + "".join(f"\n    refused: {x}" for x in self.failed)
+
+
 def teardown_smcv_modulation(src, mode):
     try:
         src.s.write(":SOURce:MODulation:ALL:STATe OFF")

@@ -10,7 +10,7 @@ A budget ODMR (optically detected magnetic resonance) rig for an NV-diamond samp
 
 ## Running things
 
-- Scripts are configured by editing constants at the top of each file or `experiments/common/config.json`. By design there are no CLI arguments. The few exceptions take an optional positional arg: a data dir for `power-sweep/plot_power_sweep_*.py` and `self-oscillation/plot_selfosc_*.py`, or a mode for `experiments/calibration/laser_rin_pc.py` (`acquire` / `selftest`) and `experiments/fm-odmr/odmr_fm_mfli_phase_pc.py`.
+- Scripts are configured by editing constants at the top of each file or `experiments/common/config.json`. By design there are no CLI arguments. The few exceptions take an optional positional arg: a data dir for `power-sweep/plot_power_sweep_*.py` and `self-oscillation/plot_selfosc_*.py`, or a mode for `experiments/calibration/laser_rin_pc.py` (`acquire` / `selftest`).
 - Nothing can be tested without hardware except the plot/analysis scripts, the simulations (`theory/nv_odmr_sim.py`, `theory/proposal/autonomous_nv_sim.py`), and `python experiments/calibration/laser_rin_pc.py selftest`. To check a hardware script's changes, use `python -m py_compile <file>`; do not run acquisition scripts, because they drive real instruments.
 - `python experiments/common/expconfig.py` prints the resolved config. `python experiments/calibration/check_instruments.py` is the first thing to run on the rig (it checks connectivity to the SMCV and the Red Pitaya SCPI server).
 

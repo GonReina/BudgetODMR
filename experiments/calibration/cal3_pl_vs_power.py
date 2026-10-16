@@ -54,22 +54,25 @@ from calib_common import (Stop, TableWriter, ask_current, ask_float, ask_tec,
 
 _EXP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_EXP, "common"))
-from odmr_smcv100b_pc import (POWER_DBM, RP_IP, RP_PORT, SMCV_IP, SMCV_PORT,
+from odmr_smcv100b_pc import (AMP_IN_CHAIN, POWER_DBM, RP_IP, RP_PORT, SMCV_IP, SMCV_PORT,
                               F_START_MHZ, F_STOP_MHZ, RedPitayaADC, SMCV100B,
                               frange, integrate)
 
 # --- settings ---------------------------------------------------------------
 MODE = "nv"                 # "nv", "background" or "nd_check"
-CURRENTS_MA = [132.0, 134.0, 136.0, 138.0, 140.0, 142.0, 144.0, 147.0]
-I_MAX_MA = 150.0            # never ask for more (set to your LDC200C limit)
+CURRENTS_MA = np.arange(150.0, 400.0, 10.0).tolist()   # the x-axis: laser current in mA
+I_MAX_MA = 400.0            # never ask for more (set to your LDC200C limit)
 PL_READS = 20               # PL = mean of 20 integrations (config integration_ms each)
-SETTLE_MIN_S, SETTLE_MAX_S, SETTLE_TOL = 20.0, 240.0, 0.005
+SETTLE_MIN_S, SETTLE_MAX_S, SETTLE_TOL = 10.0, 240.0, 0.005
 
 DO_ODMR = True              # quick CW ODMR at every current (MODE "nv" only)
 ODMR_F_START, ODMR_F_STOP = F_START_MHZ, F_STOP_MHZ    # config.json sweep window
 ODMR_STEP_MHZ = 0.5         # coarser than a full sweep: this is the quick check
-ODMR_SWEEPS = 1
-MW_POWER_DBM = POWER_DBM    # config.json sweep.power_dbm; KEEP IT FIXED for the run
+ODMR_SWEEPS = 2
+# SMCV level, KEEP IT FIXED for the run. With the ZHL-16W-43-S+ in the chain
+# (config.json mw_chain.amp_in_chain) the limit is mw_chain.smcv_max_dbm
+# (-16.4 dBm); config sweep.power_dbm (+16 dBm) is for the SMCV direct.
+MW_POWER_DBM = -18.0 if AMP_IN_CHAIN else POWER_DBM
 MW_SETTLE_S = 0.02
 N_LINES = 2                 # resonances in the window (1 at zero field)
 MONITOR_POWER = True        # type in the PM101A (pick-off) reading at every current

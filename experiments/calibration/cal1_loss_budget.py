@@ -1,5 +1,5 @@
 """
-Step 1a: LOSS BUDGET and INFRARED CHECK (do this once).
+Step 1a: LOSS BUDGET (do this once).
 
 Measures the 532 nm power at points along the free-space excitation path, at
 a few laser currents:
@@ -11,12 +11,12 @@ objective transmission T_obj (used to turn the before-objective sweep into
 power at the sample). Once a fibre is in the path, add "after_fibre" to
 POSITIONS (between laser_output and before_objective) to get its coupling.
 
-INFRARED CHECK. The S120C is a silicon sensor: it also sees the 808 nm pump and
-1064 nm leakage of the DPSS. At the positions in BP_POSITIONS each reading is
-repeated with a 532 nm bandpass filter in front of the sensor. If
-P_bandpass / T_bandpass(532) differs from the open reading, part of the
-"power" is infrared and the power axis must be corrected (plot_cal1_power.py
-does this).
+INFRARED. The S120C is a silicon sensor: it also sees the 808 nm pump and
+1064 nm leakage of the DPSS. Here the 532 nm bandpass filter stays IN the beam
+for the whole run (the setup is not touched while it runs), so every reading
+is already 532 nm only and no separate bandpass reading is taken. The rows
+are marked filter = "bp532_fixed"; plot_cal1_power.py then applies no
+infrared correction (f532 = 1).
 
   ** SAFETY **
   * after_objective: put the sensor 2-3 mm PAST the focus, never at the focus.
@@ -28,15 +28,14 @@ does this).
   * Goggles on.
 
 The PM101A is read through its analog output on Red Pitaya IN2 (see
-cal0_check_power_meter.py): FIXED range, 532 nm, for the whole run. The
-bandpass check is a ratio, so it does not depend on the mW/V factor.
+cal0_check_power_meter.py): FIXED range, 532 nm, for the whole run.
 
 Procedure (the script prompts each step):
   At the first position: zero, then reuse the saved mW/V factor or measure
   it at the top current against Optical Power Monitor. For each position:
   place the sensor, block the beam and zero, then for each current in
   CURRENTS_MA set the LDC200C, wait for the reading to settle, log LOG_S
-  seconds (and again with the bandpass filter where requested).
+  seconds.
 
 Output: <data_dir>/calibration/loss_budget_<stamp>.csv
         position,current_mA,filter,P_mW,P_std_mW,slope_mW_per_s,n,tec_C,settle_s,
@@ -48,18 +47,20 @@ Run on the PC:  python cal1_loss_budget.py
 
 from calib_common import (PowerMeter, Stop, TableWriter, ask_current, ask_tec,
                           cal_path, pause, prepare_power_meter, stamp)
+import numpy as np
 
 # --- settings ---------------------------------------------------------------
-CURRENTS_MA = [135.0, 140.0, 147.0]   # "a few powers" above threshold
-I_MAX_MA = 150.0                      # never ask for more (set to your LDC200C limit)
+CURRENTS_MA = np.arange(0, 280, 20).tolist()   # "a few powers" above threshold
+I_MAX_MA = 280.0                      # never ask for more (set to your LDC200C limit)
 LOG_S = 20.0                          # logging time per reading
-SETTLE_MIN_S, SETTLE_MAX_S = 20.0, 180.0
+SETTLE_MIN_S, SETTLE_MAX_S = 10.0, 180.0
 WAVELENGTH_NM = 532.0                 # set on the PM101A; recorded only
 
-POSITIONS = ["laser_output", "before_objective", "after_objective"]
+# POSITIONS = ["before_objective", "after_objective"]
+POSITIONS = ["after_objective"]
+
 # with a fibre: ["laser_output", "after_fibre", "before_objective", "after_objective"]
-BP_POSITIONS = ["laser_output", "before_objective"]   # also measure with the 532 nm bandpass
-BP_T532 = 0.90         # bandpass transmission at 532 nm (datasheet / measure it)
+FILTER = "bp532_fixed"  # the 532 nm bandpass stays in the beam for the whole run
 
 WHERE = {
     "laser_output": "right after the laser head (before any optics)",
@@ -89,7 +90,8 @@ def main():
                                          "settle_s", "V_mean", "V_zero"],
                                   meta=dict(experiment="loss_budget",
                                             wavelength_nm=WAVELENGTH_NM,
-                                            bp_T532=BP_T532, log_s=LOG_S, **pm.meta()))
+                                            bandpass="always in", log_s=LOG_S,
+                                            **pm.meta()))
             else:
                 pm.zero()
             for planned in CURRENTS_MA:
@@ -100,18 +102,8 @@ def main():
                 tec = ask_tec()
                 r = pm.log(LOG_S)
                 print(f"  {pos} @ {cur:.2f} mA: {r['mean']:.5f} mW")
-                out.row(pos, cur, "none", r["mean"], r["std"], r["slope"], r["n"],
+                out.row(pos, cur, FILTER, r["mean"], r["std"], r["slope"], r["n"],
                         tec, settle_s, r["v"].mean(), pm.v_zero)
-                if pos in BP_POSITIONS:
-                    pause("  Put the 532 nm BANDPASS filter in front of the sensor")
-                    b = pm.log(LOG_S)
-                    ratio = b["mean"] / BP_T532 / r["mean"] if r["mean"] else float("nan")
-                    print(f"  with bandpass: {b['mean']:.5f} mW -> 532 nm fraction "
-                          f"= {ratio:.3f}" + ("" if abs(ratio - 1) < 0.03 else
-                                              "   <-- INFRARED present?"))
-                    out.row(pos, cur, "bp532", b["mean"], b["std"], b["slope"],
-                            b["n"], tec, 0.0, b["v"].mean(), pm.v_zero)
-                    pause("  Remove the bandpass filter")
     except (Stop, KeyboardInterrupt):
         print("\nStopped -- rows so far are saved.")
     finally:
