@@ -66,7 +66,7 @@ from odmr_smcv100b_pc import (AMP_IN_CHAIN, RP_IP, RP_PORT, SMCV_IP, SMCV_PORT,
                               RedPitayaADC, SMCV100B, frange, integrate)
 
 # --- settings ---------------------------------------------------------------
-CURRENTS_MA = np.arange(180.0, 380.0, 20.0)   # laser levels to measure (mA)
+CURRENTS_MA = np.arange(160.0, 380.0, 20.0)   # laser levels to measure (mA)
 I_MAX_MA = 380.0
 # SMCV levels (dBm). With the amplifier the limit is -16.4 dBm; about +44 dB
 # reaches the antenna. 3 dB steps = factor 2 in MW power.
@@ -95,7 +95,7 @@ MW_SETTLE_S = 0.02
 PL_READS = 10
 SETTLE_MIN_S, SETTLE_MAX_S, SETTLE_TOL = 5.0, 240.0, 0.005
 MONITOR_POWER = False         # type in a pick-off power meter reading (blank = skip)
-RUN_DIR = None                # None -> new folder; or an existing map folder to resume
+RUN_DIR = r"C:\Users\qute\Downloads\rsattempt\16-10-2026\calibration\mw_laser_map_20261016_142528"
 
 COLUMNS = ["laser_step", "current_mA", "tec_C", "P_mon_mW", "PL_V", "dark_V",
            "mw_dBm", "role", "order", "n_sweeps", "contrast", "contrast_err",
