@@ -324,7 +324,7 @@ def main():
     p_mw = 10 ** (mw / 10)                       # mW at the SMCV (relative scale)
     fig3, ax3 = plt.subplots(2, 2, figsize=(14, 10))
     cmap = plt.get_cmap("viridis")
-    cmax, psat, w0, kk = (np.full(len(steps), np.nan) for _ in range(4))
+    cmax, psat, w0, kk, delta_fwhm = (np.full(len(steps), np.nan) for _ in range(5))
     for i in range(len(steps)):
         col = cmap(i / max(1, len(steps) - 1))
         ok = np.isfinite(C[i]) & np.isfinite(E[i])
@@ -342,17 +342,25 @@ def main():
             except Exception:
                 pass
         okw = good_w[i] & np.isfinite(W[i])
-        ax3[0, 1].plot(p_mw[okw], W[i, okw] ** 2, "o-", color=col, ms=4, lw=0.8)
+        ax3[0, 1].errorbar(p_mw[okw], W[i, okw], yerr=WE[i, okw], fmt="o",
+                           color=col, ms=4, capsize=2)
         if okw.sum() >= 3:
             k_, b_ = np.polyfit(p_mw[okw], W[i, okw] ** 2, 1)
             kk[i], w0[i] = k_, np.sqrt(b_) if b_ > 0 else np.nan
+            if np.isfinite(kk[i]) and np.isfinite(w0[i]):
+                delta_fwhm[i] = (np.sqrt(np.clip(kk[i] * float(p_mw[okw].max())
+                                                  + w0[i] ** 2, 0, None)) - w0[i])
+                pp_fit = np.linspace(0, float(p_mw[okw].max()) * 1.05, 80)
+                ax3[0, 1].plot(pp_fit,
+                               np.sqrt(np.clip(kk[i] * pp_fit + w0[i] ** 2, 0, None)),
+                               "--", color=col, lw=1, alpha=0.8)
     ax3[0, 0].set_xscale("log")
     ax3[0, 0].set(xlabel="MW power at the SMCV (mW)", ylabel="contrast (%)",
                   title="(a) contrast vs MW power; lines: C_max P/(P + P_sat)")
     ax3[0, 0].legend(title=ylab, fontsize=7, title_fontsize=7, loc="upper left",
                      bbox_to_anchor=(1.01, 1), frameon=False)
-    ax3[0, 1].set(xlabel="MW power at the SMCV (mW)", ylabel="FWHM^2 (MHz^2)",
-                  title="(b) power broadening: FWHM^2 = W0^2 + k P (well-measured widths)")
+    ax3[0, 1].set(xlabel="MW power at the SMCV (mW)", ylabel="FWHM (MHz)",
+                  title="(b) MW power broadening: FWHM = sqrt(W0^2 + k P) (dashed = fit)")
     ax3[1, 0].plot(yval, 10 * np.log10(psat), "o-", label="P_sat,MW (dBm at SMCV)")
     ax3[1, 0].set(xlabel=ylab, ylabel="P_sat,MW (dBm at the SMCV)",
                   title="(c) MW saturation power and C_max vs laser")
@@ -384,12 +392,21 @@ def main():
     lines = [f"MW x LASER MAP ({os.path.basename(run)}): {len(steps)} laser levels x "
              f"{len(mw)} MW powers",
              "   I (mA)  PL (mV)   C_max (%)  P_sat,MW (dBm)  W0 (MHz)  k (MHz^2/mW)  "
-             "ref drift (%)  centre shift (kHz)"]
+             "dFWHM (MHz)  ref drift (%)  centre shift (kHz)"]
     for i in range(len(steps)):
         drift = 100 * (c_end[i] / c_start[i] - 1) if c_start[i] else np.nan
+        okw_i = good_w[i] & np.isfinite(W[i])
+        med_we_i = float(np.nanmedian(WE[i, okw_i])) if okw_i.any() else np.nan
+        broad_flag = (
+            "  <-- MW power broadening"
+            if np.isfinite(delta_fwhm[i]) and np.isfinite(med_we_i)
+            and delta_fwhm[i] > 2 * med_we_i
+            else ""
+        )
         lines.append(f"  {cur[i]:7.1f}  {pl_level[i] * 1e3:7.2f}  {100 * cmax[i]:9.2f}  "
                      f"{10 * np.log10(psat[i]):14.1f}  {w0[i]:8.2f}  {kk[i]:12.3g}  "
-                     f"{drift:13.1f}  {(d_end[i] - d_start[i]) * 1e3:18.0f}")
+                     f"{delta_fwhm[i]:11.3f}  {drift:13.1f}  "
+                     f"{(d_end[i] - d_start[i]) * 1e3:18.0f}{broad_flag}")
     if best is not None:
         lines.append(f"  best sensitivity cell: {cur[best[0]]:.1f} mA, "
                      f"{mw[best[1]]:+.1f} dBm (C = {100 * C[best]:.2f} %, "

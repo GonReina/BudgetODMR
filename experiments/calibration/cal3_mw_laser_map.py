@@ -66,7 +66,7 @@ from odmr_smcv100b_pc import (AMP_IN_CHAIN, RP_IP, RP_PORT, SMCV_IP, SMCV_PORT,
                               RedPitayaADC, SMCV100B, frange, integrate)
 
 # --- settings ---------------------------------------------------------------
-CURRENTS_MA = np.arange(160.0, 380.0, 20.0)   # laser levels to measure (mA)
+CURRENTS_MA = np.arange(180.0, 380.0, 20.0)   # laser levels to measure (mA)
 I_MAX_MA = 380.0
 # SMCV levels (dBm). With the amplifier the limit is -16.4 dBm; about +44 dB
 # reaches the antenna. 3 dB steps = factor 2 in MW power.
@@ -239,9 +239,9 @@ def main():
         print(f"  dark = {dark * 1e3:.3f} mV")
         pause("Unblock the laser")
         rng = np.random.default_rng()
-        for k, planned in enumerate(CURRENTS_MA):
+        for k, planned in enumerate(CURRENTS_MA[first_step:]):
             step = first_step + k
-            print("=" * 72 + f"\nLASER LEVEL {k + 1}/{len(CURRENTS_MA)}")
+            print("=" * 72 + f"\nLASER LEVEL {step + 1}/{len(CURRENTS_MA)}")
             cur = ask_current(planned, I_MAX_MA)
             if cur is None:
                 continue

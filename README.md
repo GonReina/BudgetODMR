@@ -97,6 +97,9 @@ theory/          Simulations, calculators, notebooks (most run without hardware)
   coils/                helmholtz_designer.py (turns, wire, power, heat, inductance, homogeneity
                         of Helmholtz pairs; out/) + coil_plan.md (zero-field experiment coils
                         and how to drive/modulate them from Python)
+  nqr/                  n14_quadrupole_odnmr.md (NQR physics, the NV 14N quadrupole P and how to
+                        measure it by ODNMR at the ESLAC) + n14_levels.py (9-level NV+14N
+                        transitions, RF enhancement, magnet-pair homogeneity)
   nv_deep_dive_guide.md, nv_quiz.md
   lockin-tutorial/      lockin_odmr_tutorial.ipynb + tutorial_data/ (filled by the acq_*.py scripts above)
   optics/               Optical_Setup.ipynb + optics_model.py, optics_draw.py
