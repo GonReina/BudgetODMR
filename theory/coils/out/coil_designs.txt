@@ -11,24 +11,24 @@
   homogeneity: 1.3e-06 (0.01 uT) over a 2.0 mm cube; 1e-3 region 12.2 mm (axis) x 15.3 mm (dia); 1e-2 region 22.1 x 26.5 mm
 
 == zf_transverse_X: 2 mT at the centre ==
-  bore r_in 45 mm (diameter 90 mm), outer r 52.1 mm, winding 7.1 x 7.1 mm
+  bore r_in 50 mm (diameter 100 mm), outer r 57.1 mm, winding 7.1 x 7.1 mm
   wire 0.8 mm Cu (0.88 mm enamelled), 8 layers x 8 turns = 64 turns per coil
-  spacing 48.6 mm centre-centre (d2B/dz2 = 0);  1.185 mT/A
-  current 1.69 A (3.4 A/mm2), 2.4 V, 4.1 W for the pair, R 1.34 ohm cold / 1.45 hot
-  wire 39 m for the pair (176 g Cu)
-  winding temperature (still air, h=12): 42 C
-  inductance 1.61 mH, L/R 1.11 ms, f_3dB 143.9 Hz
-  homogeneity: 3.5e-07 (0.00 uT) over a 2.0 mm cube; 1e-3 region 16.9 mm (axis) x 21.1 mm (dia); 1e-2 region 30.5 x 36.7 mm
+  spacing 53.6 mm centre-centre (d2B/dz2 = 0);  1.074 mT/A
+  current 1.86 A (3.7 A/mm2), 3.0 V, 5.6 W for the pair, R 1.47 ohm cold / 1.63 hot
+  wire 43 m for the pair (194 g Cu)
+  winding temperature (still air, h=12): 47 C
+  inductance 1.82 mH, L/R 1.12 ms, f_3dB 142.0 Hz
+  homogeneity: 2.4e-07 (0.00 uT) over a 2.0 mm cube; 1e-3 region 18.6 mm (axis) x 23.5 mm (dia); 1e-2 region 33.7 x 40.6 mm
 
 == zf_transverse_Y: 2 mT at the centre ==
-  bore r_in 60 mm (diameter 120 mm), outer r 68.0 mm, winding 8.0 x 8.0 mm
-  wire 0.8 mm Cu (0.88 mm enamelled), 9 layers x 9 turns = 81 turns per coil
-  spacing 64.0 mm centre-centre (d2B/dz2 = 0);  1.138 mT/A
-  current 1.76 A (3.5 A/mm2), 4.3 V, 7.6 W for the pair, R 2.23 ohm cold / 2.46 hot
-  wire 65 m for the pair (293 g Cu)
-  winding temperature (still air, h=12): 47 C
-  inductance 3.55 mH, L/R 1.44 ms, f_3dB 110.3 Hz
-  homogeneity: 1.2e-07 (0.00 uT) over a 2.0 mm cube; 1e-3 region 22.3 mm (axis) x 27.9 mm (dia); 1e-2 region 40.2 x 48.5 mm
+  bore r_in 70 mm (diameter 140 mm), outer r 78.8 mm, winding 8.8 x 8.8 mm
+  wire 0.8 mm Cu (0.88 mm enamelled), 10 layers x 10 turns = 100 turns per coil
+  spacing 74.5 mm centre-centre (d2B/dz2 = 0);  1.208 mT/A
+  current 1.66 A (3.3 A/mm2), 5.9 V, 9.7 W for the pair, R 3.20 ohm cold / 3.53 hot
+  wire 94 m for the pair (421 g Cu)
+  winding temperature (still air, h=12): 46 C
+  inductance 6.39 mH, L/R 1.81 ms, f_3dB 88.0 Hz
+  homogeneity: 6.4e-08 (0.00 uT) over a 2.0 mm cube; 1e-3 region 25.9 mm (axis) x 32.5 mm (dia); 1e-2 region 46.8 x 56.5 mm
 
 == zf_modulation: 0.5 mT at the centre ==
   bore r_in 20 mm (diameter 40 mm), outer r 22.2 mm, winding 2.2 x 2.2 mm
