@@ -14,7 +14,7 @@ a = ""; b = "";
 module base_v1() {
     difference() {
         translate([-50, -25, -BEAM_H]) cube([100, 50, BASE_T]);
-        for (sx = [-1, 1]) translate([sx * SLOT_X, 0, -BEAM_H]) m6_slot();
+        m6_slots();
     }
     z_pedestal();
 }

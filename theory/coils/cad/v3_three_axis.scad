@@ -38,7 +38,7 @@ module base_v3() {
             for (sx = [-1, 1], sy = [-1, 1]) translate([sx * RY, sy * RY, zt - 0.01])
                 cylinder(d = 12, h = -tab_face(YD) - zt + 0.01, $fn = 48);
         }
-        for (sx = [-1, 1]) translate([sx * SLOT_X, 0, -BEAM_H]) m6_slot();
+        m6_slots();
         for (sx = [-1, 1]) translate([sx * RX, -60, -RX]) rotate([-90, 0, 0]) cylinder(d = M4_D, h = 120, $fn = 24);
         for (sx = [-1, 1], sy = [-1, 1]) translate([sx * RY, sy * RY, -BEAM_H - 1]) {
             cylinder(d = M4_D, h = 200, $fn = 24);

@@ -31,7 +31,10 @@ PAD_W   = 26;
 COLLAR_L = 8;       // Z former back collar (locks the modulation insert)
 COLLAR_T = 7;
 BASE_T  = 12;
-SLOT_X  = 37.5;     // M6 table slots at x = +-SLOT_X, y in +-SLOT_HALF (25 mm grid)
+// M6 table slots run along y (+-SLOT_HALF: any lateral position). There are two pairs,
+// 50 and 75 mm apart: one pair puts the coil centre on a table hole, the other halfway
+// between holes, so the coil can always sit within 6.25 mm of the focus along the beam.
+SLOT_XS = [25, 37.5];
 SLOT_HALF = 12.5;
 MOD_WALL = 2; MOD_FLANGE = 1.5; MOD_LIP = 1.5;
 
@@ -61,6 +64,8 @@ module ring(r1, r2, z0, z1) {
 }
 
 module hex_pocket(d, h) cylinder(d = d, h = h, $fn = 6);
+
+module m6_slots(t = BASE_T) for (sx = [-1, 1], x = SLOT_XS) translate([sx * x, 0, -BEAM_H]) m6_slot(t = t);
 
 module m6_slot(len = 2 * SLOT_HALF, t = BASE_T) {      // slot along y, counterbored from the top
     hull() for (s = [-1, 1]) translate([0, s * len / 2, -1]) cylinder(d = M6_D, h = t + 2, $fn = 32);
@@ -162,7 +167,7 @@ module z_pedestal() {
             translate([-g, -PAD_W / 2, zneck]) cube([2 * g, PAD_W, ztop - zneck]);
             hull() {
                 translate([-g, -PAD_W / 2, zneck]) cube([2 * g, PAD_W, 0.01]);
-                translate([-24, -PAD_W / 2, zb]) cube([48, PAD_W, 0.01]);
+                translate([-18, -PAD_W / 2, zb]) cube([36, PAD_W, 0.01]);
             }
         }
         for (y = [-7, 7]) {

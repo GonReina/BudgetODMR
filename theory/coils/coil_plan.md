@@ -32,19 +32,20 @@ all three axes need coils that can null them.
 | coil pair | field | bore Ø | wire | turns/coil | spacing | current | V | P (pair) | wire (pair) | winding T | L | f_3dB |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Z: scan + modulation | ±6 mT | 60 mm | 1.0 mm | 9×9 = 81 | 35 mm | 2.9 A | 2.6 V | 7.5 W | 36 m | 58 °C | 1.5 mH | 97 Hz |
-| X: transverse / Earth null | ±2 mT | 90 mm | 0.8 mm | 8×8 = 64 | 49 mm | 1.7 A | 2.4 V | 4.1 W | 39 m | 42 °C | 1.6 mH | 144 Hz |
-| Y: transverse / Earth null | ±2 mT | 120 mm | 0.8 mm | 9×9 = 81 | 64 mm | 1.8 A | 4.3 V | 7.6 W | 65 m | 47 °C | 3.6 mH | 110 Hz |
+| X: transverse / Earth null | ±2 mT | 100 mm | 0.8 mm | 8×8 = 64 | 54 mm | 1.9 A | 3.0 V | 5.6 W | 43 m | 47 °C | 1.8 mH | 142 Hz |
+| Y: transverse / Earth null | ±2 mT | 140 mm | 0.8 mm | 10×10 = 100 | 74 mm | 1.7 A | 5.9 V | 9.7 W | 94 m | 46 °C | 6.4 mH | 88 Hz |
 | (optional) separate modulation | 0.5 mT | 40 mm | 0.5 mm | 4×4 = 16 | 21 mm | 0.7 A | 0.3 V | 0.2 W | 4 m | 29 °C | 0.05 mH | 1.3 kHz |
 
-- **Buy about 50 m of 1.0 mm and 120 m of 0.8 mm enamelled copper wire**
-  (grade 2). That is the totals plus ~20 % for leads and mistakes.
+- **Buy about 50 m of 1.0 mm, 170 m of 0.8 mm and 5 m of 0.5 mm enamelled copper
+  wire** (grade 2). That is the totals plus ~20 % for leads and mistakes. For Z
+  alone, one 56 m reel of 1.0 mm (RS 779-0735, Block CUL 500/1,00) is enough.
 - **"Spacing" is centre-to-centre of the two windings.** It is solved for
   d²B/dz² = 0, which is the true Helmholtz condition for a thick winding. It is
   not exactly the radius.
 - **The three pairs have different bores so they nest around each other**, like
-  the cube in tarciszera's simulator. Check the mechanical fit in CAD; the
-  script does not check for collisions. The bore must clear the objective and
-  the sample mount; the paper used a 10×/0.25 objective.
+  the cube in tarciszera's simulator. X and Y were 90 / 120 mm; they are now
+  100 / 140 mm because the printed formers and flanges collided at the smaller
+  sizes (checked in `cad/`, §6). The Z bore clears the N40X-PF (Ø30 mm).
 - **Use a non-metallic former** (PETG/ABS; PLA softens at ~55 °C). An aluminium
   former is a shorted turn: it adds eddy currents that delay and attenuate the
   modulation. If you use one, cut a slot along it.
@@ -168,3 +169,70 @@ Practical routes:
    and minimise its width.
 3. Add modulation and lock-in (Red Pitaya reference on IN2, or the MFLI) for
    the derivative signal, which is the actual magnetometer.
+
+## 6. 3D-printed formers (`cad/`)
+
+Three OpenSCAD versions, each a superset of the one before, so nothing gets reprinted:
+
+| version | file | new parts to print |
+|---|---|---|
+| v1: Z scan only (the quick test) | `v1_single_axis.scad` | `z_former`, `base`, `sample_arm` |
+| v2: + modulation pair | `v2_single_axis_mod.scad` | `mod_insert` (slides into the Z bore) |
+| v3: three axes | `v3_three_axis.scad` | `base` (bigger), 2× `x_hoop`, 2× `y_hoop`, 2× `x_spacer`, 4× `y_spacer` |
+
+**Geometry**
+- The Z pair is coaxial with the optical axis, so B is normal to the [100] face of
+  the DNVB14 and all four NV orientations see the same B∥ = B/√3.
+- The objective enters the bore from the front and the sample arm from the back.
+  The arm bolts to the translation stage, so focusing moves only the diamond and
+  the coil stays put.
+- The diamond is glued (a dab of CA or crystalbond) onto a 2.4 mm square pedestal
+  that stands 2 mm proud of the arm's end face. The 3 mm diamond overhangs it, so
+  at 0.66 mm WD the objective can only meet the diamond, never plastic.
+- Free bore: 55 mm in v1, 36 mm through the mod insert (the N40X-PF is Ø30 mm).
+
+**Rig parameters** (top of `coil_lib.scad`, check them before printing)
+- `BEAM_H = 75`: optical axis above the table.
+- `STAGE_TOP = 40`: top of the sample stage above the table. This one is a guess;
+  measure your stage.
+- `ARM_REACH = 120`: riser behind the sample, chosen to clear the v3 base.
+
+**Table mounting**
+- M6 slots on the 25 mm grid run across the beam, so any lateral position is
+  reachable.
+- There are two slot pairs, 50 and 75 mm apart, so along the beam the coil centre
+  always lands within 6.25 mm of the focus. That is inside its 0.1 % region.
+- Bolt the base down first; the Z former then screws onto the pedestal from inside
+  the bore.
+
+**Regenerating**
+- The winding sizes come from `cad/coil_dims.scad`, which `helmholtz_designer.py`
+  writes, so a design change flows into the CAD.
+- `python cad/export_stl.py` writes `cad/stl/<version>/*.stl` (print orientation)
+  and `cad/preview/*.png`.
+- `python cad/export_stl.py check` intersects every pair of parts in each assembly,
+  including a ghost N40X-PF with its 30 mm cage plate. It reports any overlap
+  above 0.5 mm³; touching faces are allowed.
+
+**Printing**
+- PETG, 4 walls, ≥ 40 % infill.
+- The formers, hoops and mod insert print axis-vertical. The underside of each
+  channel's upper flange needs supports ("everywhere", tree supports clean out
+  easily).
+- The sample arm needs supports under the beam. The bases and spacers need none.
+- The Y hoop is 162 mm across, so it needs a ≥ 180 mm bed.
+
+**Hardware** (all non-magnetic near the sample: nylon or brass)
+
+| version | items |
+|---|---|
+| v1 | 2× M3×16 countersunk + 2 M3 nuts (former to pedestal); 2× M6×16 for the base and 4× M6×16 for the arm foot (steel is fine that far out) |
+| v2 | 2× M3 nylon thumbscrews + 2 M3 nuts (collar lock); 4 m of 0.5 mm wire |
+| v3 | M4 brass/nylon threaded rod: 4 × 130 mm (Y) and 4 × 90 mm (X); 16 M4 nuts |
+
+**Winding**
+- Start leads exit through the Ø1.8 mm holes at the channel floor and finish leads
+  through the rim notches, all on top (or at the back for the Y hoops).
+- Wire each pair in series aiding (the end of coil 1 to the start of coil 2, same
+  winding sense; see §3 / the schematic) and check the polarity with a compass
+  before you mount the sample.
