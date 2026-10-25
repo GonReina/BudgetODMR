@@ -33,7 +33,7 @@ from odmr_smcv100b_pc import (F_START_MHZ, F_STEP_MHZ, F_STOP_MHZ, POWER_DBM, RP
                               frange, measure_point)
 
 # --- settings ---------------------------------------------------------------
-N_SWEEPS = 3
+N_SWEEPS = 2
 DATA_DIR = load_config()["paths"]["data_dir"]
 
 

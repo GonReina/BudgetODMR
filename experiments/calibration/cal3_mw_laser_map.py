@@ -96,6 +96,8 @@ PL_READS = 10
 SETTLE_MIN_S, SETTLE_MAX_S, SETTLE_TOL = 5.0, 240.0, 0.005
 MONITOR_POWER = False         # type in a pick-off power meter reading (blank = skip)
 RUN_DIR = r"C:\Users\qute\Downloads\rsattempt\16-10-2026\calibration\mw_laser_map_20261016_142528"
+FORCE_STEP = None    # set to a laser_step integer to delete and re-run that level only;
+                  # None = normal resume behaviour
 
 COLUMNS = ["laser_step", "current_mA", "tec_C", "P_mon_mW", "PL_V", "dark_V",
            "mw_dBm", "role", "order", "n_sweeps", "contrast", "contrast_err",
@@ -211,11 +213,49 @@ def main():
     os.makedirs(run_dir, exist_ok=True)
     idx_path = os.path.join(run_dir, "index.csv")
     first_step = 0
-    if os.path.exists(idx_path):
-        _, old = read_table(idx_path)
-        if len(old.get("laser_step", [])):
-            first_step = int(np.nanmax(old["laser_step"])) + 1
-        print(f"Resuming {run_dir}: new laser levels start at step {first_step}")
+    if FORCE_STEP is not None:
+        step_to_redo = int(FORCE_STEP)
+        first_step = step_to_redo
+        if os.path.exists(idx_path):
+            with open(idx_path) as _f:
+                _raw = _f.readlines()
+            _keep, _purge, _hdr, _sc, _fc = [], [], False, 0, -1
+            for _line in _raw:
+                _s = _line.strip()
+                if _s.startswith("#"):
+                    _keep.append(_line)
+                elif not _hdr:
+                    _keep.append(_line)
+                    _cols = _s.split(",")
+                    _sc = _cols.index("laser_step") if "laser_step" in _cols else 0
+                    _fc = _cols.index("file") if "file" in _cols else -1
+                    _hdr = True
+                else:
+                    _p = _s.split(",")
+                    try:
+                        if int(round(float(_p[_sc]))) == step_to_redo:
+                            if _fc >= 0 and len(_p) > _fc:
+                                _purge.append(_p[_fc].strip())
+                            continue
+                    except (ValueError, IndexError):
+                        pass
+                    _keep.append(_line)
+            for _fn in _purge:
+                _fp = os.path.join(run_dir, _fn)
+                if os.path.exists(_fp):
+                    os.remove(_fp)
+            with open(idx_path, "w") as _f:
+                _f.writelines(_keep)
+            print(f"FORCE_STEP={step_to_redo}: purged {len(_purge)} file(s), "
+                  f"re-running {CURRENTS_MA[step_to_redo]:.0f} mA only")
+        currents_to_run = CURRENTS_MA[step_to_redo:step_to_redo + 1]
+    else:
+        if os.path.exists(idx_path):
+            _, old = read_table(idx_path)
+            if len(old.get("laser_step", [])):
+                first_step = int(np.nanmax(old["laser_step"])) + 1
+            print(f"Resuming {run_dir}: new laser levels start at step {first_step}")
+        currents_to_run = CURRENTS_MA[first_step:]
 
     src = SMCV100B(SMCV_IP, SMCV_PORT)
     too_high = [p for p in MW_DBM if p > src.max_dbm + 1e-9]
@@ -239,7 +279,7 @@ def main():
         print(f"  dark = {dark * 1e3:.3f} mV")
         pause("Unblock the laser")
         rng = np.random.default_rng()
-        for k, planned in enumerate(CURRENTS_MA[first_step:]):
+        for k, planned in enumerate(currents_to_run):
             step = first_step + k
             print("=" * 72 + f"\nLASER LEVEL {step + 1}/{len(CURRENTS_MA)}")
             cur = ask_current(planned, I_MAX_MA)

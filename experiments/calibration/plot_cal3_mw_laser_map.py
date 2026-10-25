@@ -14,6 +14,9 @@ Figures (in the run folder):
                           lighter = lower MW), legend outside the axes.
   mw_laser_map_fine.png   the 0.1 MHz fine spectra (low laser, low MW), with the
                           14N hyperfine positions marked.
+  mw_spectra_L<N>_<I>mA.png  one figure per laser level: all MW-power spectra
+                          overlaid, colour-coded from low MW (dark) to high MW
+                          (bright plasma), legend with contrast per power.
   mw_laser_map_more.png   (a) FWHM map  (b) sweeps used  (c) relative sensitivity
                           eta = FWHM / (C sqrt PL), best cell starred
                           (d) drift check: reference contrast at the start and end
@@ -270,6 +273,36 @@ def main():
                     frameon=False)
         fig_f.savefig(os.path.join(run, "mw_laser_map_fine.png"), dpi=150,
                       bbox_inches="tight")
+
+    # ---- 1d: per-laser-level spectra (all MW powers overlaid) ---------------
+    cmap_mw = plt.get_cmap("plasma")
+    print("Saving per-level spectra figures...")
+    for i in range(len(steps)):
+        plot_j = [j for j in range(len(mw)) if FILE[i, j]]
+        if not plot_j:
+            continue
+        fig_l, ax_l = plt.subplots(figsize=(11, 5))
+        for k, j in enumerate(plot_j):
+            col = cmap_mw(k / max(1, len(plot_j) - 1) * 0.88)
+            f, s = spectrum_file(run, FILE[i, j])
+            lab = f"{mw[j]:+.1f} dBm"
+            if np.isfinite(C[i, j]):
+                lab += f"  C={100 * C[i, j]:.2f}%"
+            ax_l.plot(f, 100 * (1 - s), ".", ms=2, color=col, alpha=0.45)
+            ax_l.plot(f, 100 * (1 - smooth(s)), "-", lw=1.2, color=col, label=lab)
+        laser_label = (f"{p_sample[i]:.3g} mW ({cur[i]:.0f} mA)" if use_power
+                       else f"{cur[i]:.0f} mA")
+        ax_l.set(xlabel="frequency (MHz)", ylabel="ODMR dip 1 - PL_on/PL_off (%)",
+                 title=f"ODMR spectra vs MW power — laser {laser_label} "
+                       f"({os.path.basename(run)})")
+        ax_l.grid(alpha=0.3)
+        ax_l.legend(title="MW power (SMCV setting)", loc="upper left",
+                    bbox_to_anchor=(1.01, 1.0), fontsize=7, title_fontsize=7,
+                    frameon=False)
+        out_l = os.path.join(run, f"mw_spectra_L{int(steps[i]):02d}_{cur[i]:.0f}mA.png")
+        fig_l.savefig(out_l, dpi=150, bbox_inches="tight")
+        plt.close(fig_l)
+        print(f"  {os.path.basename(out_l)}")
 
     # ---- 2: width, sweeps, sensitivity, drift ----------------------------
     # sensitivity only where contrast AND width are well measured (a weak dip's

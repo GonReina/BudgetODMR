@@ -11,8 +11,8 @@
     "smcv_max_dbm_direct": 16.0
   },
   "sweep": {
-    "f_start_mhz": 2850.0,
-    "f_stop_mhz": 2890.0,
+    "f_start_mhz": 2750.0,
+    "f_stop_mhz": 2990.0,
     "f_step_mhz": 0.1,
     "power_dbm": -18.0,
     "n_sweeps": 5,
